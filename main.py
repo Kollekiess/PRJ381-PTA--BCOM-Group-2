@@ -14,7 +14,7 @@ while True:
     if not success:
         break
     
-    ##frame = cv2.flip(frame, 1)
+    frame = cv2.flip(frame, 1)
     
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     
@@ -28,10 +28,37 @@ while True:
         
         print(
             "index Tip:",
-            pose.index_tip()
+            pose.index_tip
         )
+
+        ##print(pose.to_dict())
+        ##print(len(pose.landmarks))
         
-        x, y, z = pose.index_tip()
+        #print(      
+        #    f"Hand: {pose.handedness}"   
+        #)
+         
+        #print(        
+        #    f"Landmarks: {len(pose.landmarks)}"
+        #)
+        
+        #normalized = pose.normalize_landmarks()
+        
+        #print(normalized[0])
+        #print(normalized[8])
+        
+        #features = pose.flattened_landmarks()
+        
+        #print(len(features))
+        
+        #print(features[:9])
+        
+        tip = pose.index_tip
+        x = tip.x
+        y = tip.y
+        z = tip.z
+
+        print(pose.index_tip)
         
         screen_x = int(x * width)
         screen_y = int(y * height)

@@ -1,6 +1,7 @@
 import mediapipe as mp
 
 from tracking.hand_pose import HandPose
+from tracking.landmark import Landmark
 
 class HandTracker:
     
@@ -43,10 +44,10 @@ class HandTracker:
             
             for landmark in hand:
                 landmarks.append(
-                    (
+                    Landmark(
                         landmark.x,
                         landmark.y,
-                        landmark.z
+                        landmark.z                       
                     )
             )
                 
