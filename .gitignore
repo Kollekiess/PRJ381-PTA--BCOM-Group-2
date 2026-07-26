@@ -119,9 +119,6 @@ __pycache__/
 *.pyo
 *.pyd
 
-#tests
-test/
-
 #VS Code
 .vscode/
 
