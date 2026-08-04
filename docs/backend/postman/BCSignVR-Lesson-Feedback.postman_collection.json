@@ -1,0 +1,100 @@
+{
+  "info": {
+    "_postman_id": "713f190e-30d2-4b75-bf60-9b7e75d1a721",
+    "name": "BCSignVR - Lesson and Feedback API (Draft)",
+    "description": "Provisional requests for Dewald's backend contract. Update routes and payloads after the shared backend is committed.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "authToken", "value": "replace-with-test-token" },
+    { "key": "lessonId", "value": "lesson-id" }
+  ],
+  "item": [
+    {
+      "name": "Lessons",
+      "item": [
+        {
+          "name": "List lessons",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/lessons",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "lessons"]
+            },
+            "description": "Returns lessons available to the learner. Authentication requirements are pending confirmation."
+          },
+          "response": []
+        },
+        {
+          "name": "Get lesson",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/lessons/{{lessonId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "lessons", "{{lessonId}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get lesson progress",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{authToken}}", "type": "string" }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/lessons/{{lessonId}}/progress",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "lessons", "{{lessonId}}", "progress"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Feedback",
+      "item": [
+        {
+          "name": "Submit gesture result",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{authToken}}", "type": "string" }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lessonId\": \"{{lessonId}}\",\n  \"gestureId\": \"A\",\n  \"accuracy\": 85,\n  \"errors\": [\"Thumb position incorrect\"],\n  \"attemptedAt\": \"2026-08-04T12:00:00Z\"\n}",
+              "options": {
+                "raw": { "language": "json" }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/feedback",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "feedback"]
+            },
+            "description": "Submits gesture-comparison output. The authenticated user must come from middleware rather than the request body."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
