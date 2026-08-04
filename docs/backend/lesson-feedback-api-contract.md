@@ -1,6 +1,6 @@
 # Lesson Delivery and Feedback API Contract
 
-Owner: Dewald Allers  
+Owner: Dewald Allers
 Status: Provisional contract; implementation blocked by missing shared source
 
 ## Purpose
@@ -181,4 +181,3 @@ Dewald's part is complete when:
 - Unity receives stable feedback and progress data.
 - Failure cases return consistent errors.
 - Automated tests and API usage examples pass.
-
