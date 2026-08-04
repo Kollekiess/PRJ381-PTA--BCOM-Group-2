@@ -1,26 +1,27 @@
 # PRJ381-PTA--BCOM-Group-2
 
-BCSignVR is a university group project exploring an immersive VR tutor for
-learning South African Sign Language through real-time interaction.
+## BCSignVR
 
-## Dewald's backend work
+BCSignVR is our VR project for learning South African Sign Language. A user
+will choose a lesson, watch a sign, try the gesture and receive feedback on
+their attempt.
 
-Dewald owns the proposed lesson-delivery and feedback API contract. The
-contract is deliberately framework-independent until the shared backend,
-authentication middleware, session logger, MongoDB structures, and Unity API
-client are committed.
+## My backend work
+
+I am working on the lesson and feedback endpoints. The main backend and
+database code have not been added yet, so I prepared drafts that can be updated
+once the rest of the project is available.
 
 - [Lesson and feedback API contract](docs/backend/lesson-feedback-api-contract.md)
-- [Provisional OpenAPI document](docs/backend/openapi/lesson-feedback-api.openapi.json)
+- [OpenAPI draft](docs/backend/openapi/lesson-feedback-api.openapi.json)
 - [Postman collection](docs/backend/postman/BCSignVR-Lesson-Feedback.postman_collection.json)
-- [Contract validation script](scripts/validate-backend-contract.ps1)
+- [Simple validation script](scripts/validate-backend-contract.ps1)
 
-Run the contract validation from the repository root:
+To check the draft files, run:
 
 ```powershell
 ./scripts/validate-backend-contract.ps1
 ```
 
-These artifacts are proposals, not evidence of an implemented backend. Route
-names and fields must be reconciled with the team's actual code before the API
-is implemented.
+The routes and fields are not final yet. I will match them to the team's actual
+backend, authentication and database code once it has been pushed.
