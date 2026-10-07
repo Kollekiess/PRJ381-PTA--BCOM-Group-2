@@ -1,0 +1,16 @@
+true letter -> predicted letter : times
+Y -> I : 14
+M -> N : 14
+F -> B : 13
+N -> M : 9
+S -> E : 8
+R -> U : 7
+O -> A : 5
+T -> D : 4
+V -> U : 3
+U -> R : 3
+R -> V : 2
+R -> K : 2
+Q -> L : 2
+X -> N : 1
+X -> E : 1
