@@ -1,16 +1,143 @@
 {
   "info": {
     "_postman_id": "713f190e-30d2-4b75-bf60-9b7e75d1a721",
-    "name": "BCSignVR - Lesson and Feedback API (Draft)",
-    "description": "Provisional requests for Dewald's backend contract. Update routes and payloads after the shared backend is committed.",
+    "name": "BCSignVR - Lesson and Feedback API",
+    "description": "Set a confirmed test account, login, list lessons, then submit and reload feedback. Clear attemptId and attemptedAt for a new attempt; keep them for a retry.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{authToken}}",
+        "type": "string"
+      }
+    ]
+  },
   "variable": [
-    { "key": "baseUrl", "value": "http://localhost:3000" },
-    { "key": "authToken", "value": "replace-with-test-token" },
-    { "key": "lessonId", "value": "lesson-id" }
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "email",
+      "value": ""
+    },
+    {
+      "key": "password",
+      "value": ""
+    },
+    {
+      "key": "authToken",
+      "value": ""
+    },
+    {
+      "key": "lessonId",
+      "value": ""
+    },
+    {
+      "key": "attemptId",
+      "value": ""
+    },
+    {
+      "key": "attemptedAt",
+      "value": ""
+    }
   ],
   "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register test account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Login succeeds\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json();",
+                  "  pm.collectionVariables.set(\"authToken\", data.session.access_token);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
     {
       "name": "Lessons",
       "item": [
@@ -21,12 +148,31 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/lessons",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "lessons"]
-            },
-            "description": "Returns lessons available to the learner. Authentication requirements are pending confirmation."
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lessons"
+              ]
+            }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Lessons load\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200 && !pm.collectionVariables.get(\"lessonId\")) {",
+                  "  const lessons = pm.response.json().lessons;",
+                  "  if (lessons.length) pm.collectionVariables.set(\"lessonId\", lessons[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Get lesson",
@@ -35,8 +181,14 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/lessons/{{lessonId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "lessons", "{{lessonId}}"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lessons",
+                "{{lessonId}}"
+              ]
             }
           },
           "response": []
@@ -44,18 +196,19 @@
         {
           "name": "Get lesson progress",
           "request": {
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                { "key": "token", "value": "{{authToken}}", "type": "string" }
-              ]
-            },
             "method": "GET",
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/lessons/{{lessonId}}/progress",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "lessons", "{{lessonId}}", "progress"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lessons",
+                "{{lessonId}}",
+                "progress"
+              ]
             }
           },
           "response": []
@@ -68,31 +221,56 @@
         {
           "name": "Submit gesture result",
           "request": {
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                { "key": "token", "value": "{{authToken}}", "type": "string" }
-              ]
-            },
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"lessonId\": \"{{lessonId}}\",\n  \"gestureId\": \"A\",\n  \"accuracy\": 85,\n  \"errors\": [\"Thumb position incorrect\"],\n  \"attemptedAt\": \"2026-08-04T12:00:00Z\"\n}",
-              "options": {
-                "raw": { "language": "json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
               }
-            },
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/feedback",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "feedback"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "feedback"
+              ]
             },
-            "description": "Submits gesture-comparison output. The authenticated user must come from middleware rather than the request body."
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"attemptId\": \"{{attemptId}}\",\n  \"lessonId\": \"{{lessonId}}\",\n  \"target\": \"A\",\n  \"predicted\": \"A\",\n  \"confidence\": 0.9,\n  \"target_score\": 0.9,\n  \"correct\": true,\n  \"message\": \"Correct!\",\n  \"hint\": \"\",\n  \"attemptedAt\": \"{{attemptedAt}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           },
-          "response": []
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get(\"attemptId\")) pm.collectionVariables.set(\"attemptId\", pm.variables.replaceIn(\"{{$guid}}\"));",
+                  "if (!pm.collectionVariables.get(\"attemptedAt\")) pm.collectionVariables.set(\"attemptedAt\", new Date().toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Attempt saves or retries\", () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));",
+                  "if ([200, 201].includes(pm.response.code)) pm.test(\"Progress returned\", () => pm.expect(pm.response.json().updatedProgress.lessonId).to.eql(pm.collectionVariables.get(\"lessonId\")));"
+                ]
+              }
+            }
+          ]
         }
       ]
     }

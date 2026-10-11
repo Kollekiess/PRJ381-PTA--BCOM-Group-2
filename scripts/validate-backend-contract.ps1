@@ -28,7 +28,7 @@ Assert-ContractValue ($null -ne $openApi.paths.'/api/lessons/{lessonId}/progress
 Assert-ContractValue ($null -ne $openApi.paths.'/api/feedback'.post) "Missing POST /api/feedback."
 
 $feedbackRequired = @($openApi.components.schemas.FeedbackRequest.required)
-foreach ($field in @("lessonId", "gestureId", "accuracy", "attemptedAt")) {
+foreach ($field in @("lessonId", "target", "predicted", "confidence", "target_score", "correct", "attemptedAt")) {
     Assert-ContractValue ($feedbackRequired -contains $field) "FeedbackRequest must require '$field'."
 }
 
@@ -44,10 +44,12 @@ foreach ($folder in $postman.item) {
     }
 }
 
-Assert-ContractValue ($requestCount -eq 4) "Postman collection must contain four draft requests."
+Assert-ContractValue ($requestCount -eq 6) "Postman collection must contain six requests."
 Assert-ContractValue ($null -ne $feedbackBody) "Postman collection must include a feedback request body."
 
-$feedbackBody.Replace("{{lessonId}}", "lesson-id") | ConvertFrom-Json | Out-Null
+$feedbackBody | ConvertFrom-Json | Out-Null
+Assert-ContractValue ($null -ne $openApi.security) "All lesson routes must require bearer authentication."
+Assert-ContractValue ($postman.auth.type -eq "bearer") "Postman must use bearer authentication."
 
 Write-Output "Backend contract validation passed."
 Write-Output "Validated OpenAPI paths: 4"

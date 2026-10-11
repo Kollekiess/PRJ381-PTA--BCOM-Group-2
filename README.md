@@ -2,26 +2,26 @@
 
 ## BCSignVR
 
-BCSignVR is our VR project for learning South African Sign Language. A user
-will choose a lesson, watch a sign, try the gesture and receive feedback on
-their attempt.
+Our project uses VR to help learners practise South African Sign Language.
+The learner chooses a lesson, sees a sign, tries it and gets feedback.
 
 ## My backend work
 
-I am working on the lesson and feedback endpoints. The main backend and
-database code have not been added yet, so I prepared drafts that can be updated
-once the rest of the project is available.
+The lesson and feedback endpoints are in `BackEnd`. They use the existing
+Supabase tables and Roebin's authentication routes. Attempts and best scores
+are saved together, and progress is linked to the logged-in learner.
 
-- [Lesson and feedback API contract](docs/backend/lesson-feedback-api-contract.md)
-- [OpenAPI draft](docs/backend/openapi/lesson-feedback-api.openapi.json)
+From `BackEnd`, run `npm ci`, copy `.env.example` to `.env`, fill in the Supabase
+settings, and run `npm start`. Use Node.js 22 or newer. The database owner also
+needs to apply the new lesson-feedback migration before saving attempts.
+
+- [Setup, endpoints and testing](docs/backend/lesson-feedback-api-contract.md)
+- [OpenAPI specification](docs/backend/openapi/lesson-feedback-api.openapi.json)
 - [Postman collection](docs/backend/postman/BCSignVR-Lesson-Feedback.postman_collection.json)
-- [Simple validation script](scripts/validate-backend-contract.ps1)
 
-To check the draft files, run:
+Run `npm test` in `BackEnd` for the local API and database tests. From the
+repository root, run `./scripts/validate-backend-contract.ps1` to check the docs.
 
-```powershell
-./scripts/validate-backend-contract.ps1
-```
-
-The routes and fields are not final yet. I will match them to the team's actual
-backend, authentication and database code once it has been pushed.
+The local tests pass. The hosted database and Unity still need an integration
+check using the team's settings. Lesson completion follows the team's existing
+rules; submitting one correct sign does not automatically complete a lesson.

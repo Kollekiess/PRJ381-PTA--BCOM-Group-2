@@ -1,6 +1,5 @@
 const express = require('express');
 const router = express.Router();
-require('dotenv').config(); // load env keys so the app doesn't crash
 
 const { createClient } = require('@supabase/supabase-js');
 

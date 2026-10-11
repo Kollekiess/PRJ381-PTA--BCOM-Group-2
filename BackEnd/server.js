@@ -1,14 +1,17 @@
-const express = require('express');
-const app = express();
-const authRoutes = require('./auth');
-const PORT = 3000;
+const path = require('node:path');
+require('dotenv').config({ path: path.join(__dirname, '.env'), quiet: true });
 
-app.use(express.json());
+const { createApp } = require('./app');
+const { createUserClient } = require('./supabase');
 
-app.get('/', (req, res) => {
-    res.send('BCSignVR Backend is running');
-});
-
-app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
-});
+try {
+    const app = createApp({
+        authRoutes: require('./auth'),
+        createUserClient
+    });
+    const port = process.env.PORT || 3000;
+    app.listen(port, () => console.log(`Server is running on port ${port}`));
+} catch (error) {
+    console.error('Backend could not start. Check BackEnd/.env and the setup instructions.');
+    process.exitCode = 1;
+}

@@ -2,118 +2,315 @@
   "openapi": "3.0.3",
   "info": {
     "title": "BCSignVR Lesson and Feedback API",
-    "version": "0.1.0-draft",
-    "description": "Provisional, framework-independent contract for Dewald's lesson-delivery and feedback endpoints. Route names and fields must be reconciled with the shared backend before implementation."
+    "version": "1.0.0",
+    "description": "Lesson delivery and feedback using the existing Supabase tables. Hosted database and Unity integration still need verification."
   },
   "servers": [
     {
       "url": "http://localhost:3000",
-      "description": "Placeholder local development URL"
+      "description": "Local backend; use the computer address from a separate device."
     }
   ],
-  "tags": [
-    { "name": "Lessons" },
-    { "name": "Feedback" }
+  "security": [
+    {
+      "bearerAuth": []
+    }
   ],
   "paths": {
     "/api/lessons": {
       "get": {
-        "tags": ["Lessons"],
-        "summary": "List available lessons",
+        "summary": "List lessons",
         "operationId": "listLessons",
+        "tags": [
+          "Lessons"
+        ],
         "responses": {
           "200": {
-            "description": "Available lessons",
+            "description": "List lessons",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": { "$ref": "#/components/schemas/Lesson" }
+                  "type": "object",
+                  "required": [
+                    "lessons"
+                  ],
+                  "properties": {
+                    "lessons": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Lesson"
+                      }
+                    }
+                  }
                 }
               }
             }
           },
-          "500": { "$ref": "#/components/responses/ServerError" }
+          "401": {
+            "description": "Missing or invalid login token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
         }
       }
     },
     "/api/lessons/{lessonId}": {
       "get": {
-        "tags": ["Lessons"],
-        "summary": "Deliver one lesson",
+        "summary": "Get one lesson",
         "operationId": "getLesson",
-        "parameters": [
-          { "$ref": "#/components/parameters/LessonId" }
+        "tags": [
+          "Lessons"
         ],
         "responses": {
           "200": {
-            "description": "Lesson content",
+            "description": "Get one lesson",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Lesson" }
+                "schema": {
+                  "$ref": "#/components/schemas/Lesson"
+                }
               }
             }
           },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "500": { "$ref": "#/components/responses/ServerError" }
-        }
+          "401": {
+            "description": "Missing or invalid login token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid lesson ID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Lesson not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "lessonId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
       }
     },
     "/api/lessons/{lessonId}/progress": {
       "get": {
-        "tags": ["Lessons"],
-        "summary": "Get progress for the authenticated learner",
-        "operationId": "getLessonProgress",
-        "security": [
-          { "bearerAuth": [] }
-        ],
-        "parameters": [
-          { "$ref": "#/components/parameters/LessonId" }
+        "summary": "Get the logged-in learner progress",
+        "operationId": "getProgress",
+        "tags": [
+          "Lessons"
         ],
         "responses": {
           "200": {
-            "description": "Current lesson progress",
+            "description": "Get the logged-in learner progress",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Progress" }
+                "schema": {
+                  "$ref": "#/components/schemas/Progress"
+                }
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "500": { "$ref": "#/components/responses/ServerError" }
-        }
+          "401": {
+            "description": "Missing or invalid login token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid lesson ID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Lesson not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "lessonId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
       }
     },
     "/api/feedback": {
       "post": {
-        "tags": ["Feedback"],
-        "summary": "Record a gesture-comparison result and return feedback",
-        "operationId": "createFeedback",
-        "security": [
-          { "bearerAuth": [] }
+        "summary": "Save a gesture result and return feedback",
+        "operationId": "submitFeedback",
+        "tags": [
+          "Feedback"
         ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/FeedbackRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackRequest"
+              }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "Attempt recorded and feedback generated",
+            "description": "New attempt saved",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/FeedbackResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackResponse"
+                }
               }
             }
           },
-          "400": { "$ref": "#/components/responses/ValidationError" },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "404": { "$ref": "#/components/responses/NotFound" },
-          "500": { "$ref": "#/components/responses/ServerError" }
+          "200": {
+            "description": "Identical persisted attempt retried",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid feedback",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid login token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Lesson not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Attempt ID already used with different saved data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -123,147 +320,195 @@
       "bearerAuth": {
         "type": "http",
         "scheme": "bearer",
-        "description": "Temporary placeholder only. Replace this scheme with Roebin's actual authentication contract."
-      }
-    },
-    "parameters": {
-      "LessonId": {
-        "name": "lessonId",
-        "in": "path",
-        "required": true,
-        "description": "Identifier defined by the team's lesson data model.",
-        "schema": { "type": "string", "minLength": 1 }
+        "bearerFormat": "JWT"
       }
     },
     "schemas": {
-      "Lesson": {
+      "Error": {
         "type": "object",
-        "required": ["id", "title", "difficulty", "sign", "instructions", "demonstrationReference"],
+        "required": [
+          "error"
+        ],
         "properties": {
-          "id": { "type": "string" },
-          "title": { "type": "string" },
-          "difficulty": { "type": "string" },
-          "sign": { "type": "string" },
-          "instructions": { "type": "string" },
-          "demonstrationReference": {
-            "type": "string",
-            "description": "Asset or animation reference expected by Unity."
+          "error": {
+            "type": "string"
           }
-        },
-        "example": {
-          "id": "lesson-id",
-          "title": "SASL Letter A",
-          "difficulty": "beginner",
-          "sign": "A",
-          "instructions": "Follow the demonstrated hand position.",
-          "demonstrationReference": "asset-reference"
         }
       },
-      "FeedbackRequest": {
+      "Lesson": {
         "type": "object",
-        "required": ["lessonId", "gestureId", "accuracy", "attemptedAt"],
+        "required": [
+          "id",
+          "title",
+          "category",
+          "difficulty",
+          "targetGestures",
+          "createdAt"
+        ],
         "properties": {
-          "lessonId": { "type": "string", "minLength": 1 },
-          "gestureId": { "type": "string", "minLength": 1 },
-          "accuracy": { "type": "number", "minimum": 0, "maximum": 100 },
-          "errors": {
-            "type": "array",
-            "items": { "type": "string" },
-            "default": []
+          "id": {
+            "type": "string",
+            "format": "uuid"
           },
-          "attemptedAt": { "type": "string", "format": "date-time" }
-        },
-        "additionalProperties": false,
-        "example": {
-          "lessonId": "lesson-id",
-          "gestureId": "A",
-          "accuracy": 85,
-          "errors": ["Thumb position incorrect"],
-          "attemptedAt": "2026-08-04T12:00:00Z"
+          "title": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "Letters",
+              "Words",
+              "Emergency"
+            ]
+          },
+          "difficulty": {
+            "type": "integer",
+            "nullable": true
+          },
+          "targetGestures": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "Progress": {
         "type": "object",
-        "required": ["lessonId", "completed", "bestAccuracy", "attemptCount"],
+        "required": [
+          "lessonId",
+          "completed",
+          "highestScore",
+          "lastAttempted"
+        ],
         "properties": {
-          "lessonId": { "type": "string" },
-          "completed": { "type": "boolean" },
-          "bestAccuracy": { "type": "number", "minimum": 0, "maximum": 100 },
-          "attemptCount": { "type": "integer", "minimum": 0 }
+          "lessonId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "completed": {
+            "type": "boolean"
+          },
+          "highestScore": {
+            "type": "number"
+          },
+          "lastAttempted": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
         }
+      },
+      "FeedbackRequest": {
+        "type": "object",
+        "required": [
+          "lessonId",
+          "target",
+          "predicted",
+          "confidence",
+          "target_score",
+          "correct",
+          "attemptedAt"
+        ],
+        "properties": {
+          "attemptId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Reuse the same UUID and payload when retrying an attempt."
+          },
+          "lessonId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "target": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "\\S"
+          },
+          "predicted": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "\\S"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "target_score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "correct": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "hint": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "attemptedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "Fields from the gesture engine plus the selected lesson and attempt time. User IDs are rejected. target_score cannot exceed confidence, and the two must agree when target equals predicted. Correct results must predict the target. Confidence is not measured accuracy."
       },
       "FeedbackResponse": {
         "type": "object",
-        "required": ["correct", "accuracy", "feedbackMessage", "lessonCompleted"],
+        "required": [
+          "attemptId",
+          "gestureId",
+          "predicted",
+          "confidence",
+          "target_score",
+          "correct",
+          "feedbackMessage",
+          "hint",
+          "updatedProgress"
+        ],
         "properties": {
-          "correct": { "type": "boolean" },
-          "accuracy": { "type": "number", "minimum": 0, "maximum": 100 },
-          "feedbackMessage": { "type": "string" },
-          "lessonCompleted": { "type": "boolean" },
-          "updatedProgress": { "$ref": "#/components/schemas/Progress" }
-        },
-        "example": {
-          "correct": true,
-          "accuracy": 85,
-          "feedbackMessage": "Good attempt. Adjust your thumb position.",
-          "lessonCompleted": true,
+          "attemptId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "gestureId": {
+            "type": "string"
+          },
+          "predicted": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "target_score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "correct": {
+            "type": "boolean"
+          },
+          "feedbackMessage": {
+            "type": "string"
+          },
+          "hint": {
+            "type": "string"
+          },
           "updatedProgress": {
-            "lessonId": "lesson-id",
-            "completed": true,
-            "bestAccuracy": 85,
-            "attemptCount": 1
-          }
-        }
-      },
-      "Error": {
-        "type": "object",
-        "required": ["error"],
-        "properties": {
-          "error": {
-            "type": "object",
-            "required": ["code", "message"],
-            "properties": {
-              "code": { "type": "string" },
-              "message": { "type": "string" },
-              "details": {
-                "type": "array",
-                "items": { "type": "string" }
-              }
-            }
-          }
-        }
-      }
-    },
-    "responses": {
-      "ValidationError": {
-        "description": "Request validation failed",
-        "content": {
-          "application/json": {
-            "schema": { "$ref": "#/components/schemas/Error" }
-          }
-        }
-      },
-      "Unauthorized": {
-        "description": "Authentication is missing or invalid",
-        "content": {
-          "application/json": {
-            "schema": { "$ref": "#/components/schemas/Error" }
-          }
-        }
-      },
-      "NotFound": {
-        "description": "The requested lesson or related resource does not exist",
-        "content": {
-          "application/json": {
-            "schema": { "$ref": "#/components/schemas/Error" }
-          }
-        }
-      },
-      "ServerError": {
-        "description": "Unexpected server or data-access failure",
-        "content": {
-          "application/json": {
-            "schema": { "$ref": "#/components/schemas/Error" }
+            "$ref": "#/components/schemas/Progress"
           }
         }
       }
