@@ -1,45 +1,53 @@
 const express = require('express');
 const router = express.Router();
+require('dotenv').config(); // load env keys so the app doesn't crash
 
-const users = [];
+const { createClient } = require('@supabase/supabase-js');
 
+// hook up Tiaan's db connection
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+
+// REGISTER
 router.post('/register', async (req, res) => {
     try {
         const { email, password } = req.body;
 
         if (!email || !password) {
-            return res.status(400).json({ error: 'Email and password are required' });
+            return res.status(400).json({ error: 'need both email and password' });
         }
 
-        const existingUser = users.find(u => u.email === email);
-        if (existingUser) {
-            return res.status(400).json({ error: 'User already exists' });
+        // push new user to supabase
+        const { data, error } = await supabase.auth.signUp({ email, password });
+
+        if (error) {
+            return res.status(400).json({ error: error.message });
         }
 
-        users.push({ email, password });
-
-        res.status(201).json({ message: 'User registered successfully!' });
+        res.status(201).json({ message: 'registered successfully', user: data.user });
     } catch (err) {
-        res.status(500).json({ error: 'Server error during registration' });
+        res.status(500).json({ error: 'server error' });
     }
 });
 
+// LOGIN
 router.post('/login', async (req, res) => {
     try {
         const { email, password } = req.body;
 
         if (!email || !password) {
-            return res.status(400).json({ error: 'Email and password are required' });
+            return res.status(400).json({ error: 'need both email and password' });
         }
 
-        const user = users.find(u => u.email === email && u.password === password);
-        if (!user) {
-            return res.status(400).json({ error: 'Invalid email or password' });
+        // check creds against db
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+        if (error) {
+            return res.status(400).json({ error: 'invalid credentials' });
         }
 
-        res.status(200).json({ message: 'Login successful!' });
+        res.status(200).json({ message: 'login success', session: data.session });
     } catch (err) {
-        res.status(500).json({ error: 'Server error during login' });
+        res.status(500).json({ error: 'server error' });
     }
 });
 
