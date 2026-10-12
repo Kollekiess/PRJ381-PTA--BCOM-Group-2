@@ -1,0 +1,6 @@
+# Runtime for the webcam practice demo; no direct Supabase client is needed.
+tensorflow==2.20.0
+mediapipe==0.10.35
+opencv-contrib-python==4.12.0.88
+numpy>=2,<2.3
+pandas>=2.2,<3

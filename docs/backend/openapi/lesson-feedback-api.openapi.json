@@ -1,0 +1,517 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "BCSignVR Lesson and Feedback API",
+    "version": "1.0.0",
+    "description": "Lesson delivery and feedback using the existing Supabase tables. Hosted database and Unity integration still need verification."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Local backend; use the computer address from a separate device."
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/lessons": {
+      "get": {
+        "summary": "List lessons",
+        "operationId": "listLessons",
+        "tags": [
+          "Lessons"
+        ],
+        "responses": {
+          "200": {
+            "description": "List lessons",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "lessons"
+                  ],
+                  "properties": {
+                    "lessons": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Lesson"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid login token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/lessons/{lessonId}": {
+      "get": {
+        "summary": "Get one lesson",
+        "operationId": "getLesson",
+        "tags": [
+          "Lessons"
+        ],
+        "responses": {
+          "200": {
+            "description": "Get one lesson",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Lesson"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid login token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid lesson ID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Lesson not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "lessonId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/lessons/{lessonId}/progress": {
+      "get": {
+        "summary": "Get the logged-in learner progress",
+        "operationId": "getProgress",
+        "tags": [
+          "Lessons"
+        ],
+        "responses": {
+          "200": {
+            "description": "Get the logged-in learner progress",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Progress"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid login token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid lesson ID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Lesson not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "lessonId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/feedback": {
+      "post": {
+        "summary": "Save a gesture result and return feedback",
+        "operationId": "submitFeedback",
+        "tags": [
+          "Feedback"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "New attempt saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackResponse"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Identical persisted attempt retried",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid feedback",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid login token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Lesson not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Attempt ID already used with different saved data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "Lesson": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "category",
+          "difficulty",
+          "targetGestures",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "Letters",
+              "Words",
+              "Emergency"
+            ]
+          },
+          "difficulty": {
+            "type": "integer",
+            "nullable": true
+          },
+          "targetGestures": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Progress": {
+        "type": "object",
+        "required": [
+          "lessonId",
+          "completed",
+          "highestScore",
+          "lastAttempted"
+        ],
+        "properties": {
+          "lessonId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "completed": {
+            "type": "boolean"
+          },
+          "highestScore": {
+            "type": "number"
+          },
+          "lastAttempted": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "FeedbackRequest": {
+        "type": "object",
+        "required": [
+          "lessonId",
+          "target",
+          "predicted",
+          "confidence",
+          "target_score",
+          "correct",
+          "attemptedAt"
+        ],
+        "properties": {
+          "attemptId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Reuse the same UUID and payload when retrying an attempt."
+          },
+          "lessonId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "target": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "\\S"
+          },
+          "predicted": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "\\S"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "target_score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "correct": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "hint": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "attemptedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "Fields from the gesture engine plus the selected lesson and attempt time. User IDs are rejected. target_score cannot exceed confidence, and the two must agree when target equals predicted. Correct results must predict the target. Confidence is not measured accuracy."
+      },
+      "FeedbackResponse": {
+        "type": "object",
+        "required": [
+          "attemptId",
+          "gestureId",
+          "predicted",
+          "confidence",
+          "target_score",
+          "correct",
+          "feedbackMessage",
+          "hint",
+          "updatedProgress"
+        ],
+        "properties": {
+          "attemptId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "gestureId": {
+            "type": "string"
+          },
+          "predicted": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "target_score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "correct": {
+            "type": "boolean"
+          },
+          "feedbackMessage": {
+            "type": "string"
+          },
+          "hint": {
+            "type": "string"
+          },
+          "updatedProgress": {
+            "$ref": "#/components/schemas/Progress"
+          }
+        }
+      }
+    }
+  }
+}
