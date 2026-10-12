@@ -18,6 +18,7 @@ needs to apply the new lesson-feedback migration before saving attempts.
 - [Setup, endpoints and testing](docs/backend/lesson-feedback-api-contract.md)
 - [OpenAPI specification](docs/backend/openapi/lesson-feedback-api.openapi.json)
 - [Postman collection](docs/backend/postman/BCSignVR-Lesson-Feedback.postman_collection.json)
+- [Connected hand recognition demo](docs/backend/hand-recognition-integration.md)
 
 Run `npm test` in `BackEnd` for the local API and database tests. From the
 repository root, run `./scripts/validate-backend-contract.ps1` to check the docs.

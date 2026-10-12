@@ -152,6 +152,9 @@ Database details and keys are not returned to the client.
 
 ## Testing and Unity handoff
 
+The trained webcam recognizer can now submit its results through these endpoints.
+See [hand recognition setup and remaining VR work](hand-recognition-integration.md).
+
 `npm test` covers the HTTP routes, validation, authentication failures, user
 isolation, retries and progress. A PostgreSQL test runs both migrations and checks
 the actual permissions, transaction rollback and score updates. The tests use

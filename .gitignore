@@ -106,3 +106,6 @@ InitTestScene*.unity*
 /[Aa]ssets/[Ss]ceneDependencyCache*
 .env
 node_modules
+__pycache__/
+.venv/
+*.feedback-pending.json
