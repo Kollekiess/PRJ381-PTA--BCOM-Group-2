@@ -64,7 +64,8 @@ Hold a sign for about one second; S skips, Q/Escape ends the session.
 
 The original requirements file omitted TensorFlow and pandas, which the feedback
 engine imports. `requirements-practice.txt` provides a separate runtime for this
-demo and avoids installing two different OpenCV packages. Training/evaluation
+demo and uses `opencv-contrib-python`, matching MediaPipe's dependency without
+installing a second OpenCV package. Training/evaluation
 scripts have additional dependencies and are outside this runtime.
 
 ## Checks and remaining work
@@ -76,14 +77,16 @@ PostgreSQL migrations, with Supabase login/transport replaced by a local test
 learner. Camera-loop tests use simulated recognition results.
 
 The eight connection tests and the existing 19 backend tests pass locally.
-Actual TensorFlow inference and webcam recognition were not run here: the model
-runtime download stalled. The separate practice requirements resolve their
-package metadata, but a complete runtime installation remains to be verified.
+The tracking runtime is now installed and checked: the existing HandTracker
+loads its model, processes webcam frames and detects a hand with 21 landmarks.
+Actual letter-classifier TensorFlow inference remains unverified because its
+runtime download stalled; the complete practice runtime still needs installation.
 The selected package releases are listed on [TensorFlow's package page](https://pypi.org/project/tensorflow/2.20.0/),
 [MediaPipe's package page](https://pypi.org/project/mediapipe/0.10.35/) and
-[OpenCV's package page](https://pypi.org/project/opencv-python/4.12.0.88/).
+[OpenCV's package page](https://pypi.org/project/opencv-contrib-python/4.12.0.88/).
 
-The live demo still needs the hosted migration, real login and webcam testing.
+The live lesson demo still needs the hosted migration, real login and letter
+recognition testing with the webcam.
 Her committed evaluation report records 77.45% held-out accuracy, with uneven
 results across letters; test the chosen demo letters on the actual webcam.
 The new connection does not retrain or alter her classifier or feedback rules.
