@@ -1,5 +1,7 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.XR;
+using System.Collections.Generic;
 
 public class CardboardManager : MonoBehaviour
 {
@@ -28,6 +30,17 @@ public class CardboardManager : MonoBehaviour
     private bool isGyroSupported = false;
     private Quaternion gyroInitialRotation = Quaternion.identity;
 
+    public static bool IsNativeXRActive()
+    {
+        var displays = new List<XRDisplaySubsystem>();
+        SubsystemManager.GetSubsystems(displays);
+        foreach (var d in displays)
+        {
+            if (d.running) return true;
+        }
+        return XRSettings.isDeviceActive;
+    }
+
     void Awake()
     {
         if (Instance != null && Instance != this)
@@ -39,8 +52,8 @@ public class CardboardManager : MonoBehaviour
 
         FindMainCamera();
 
-        // Enable gyro on mobile if available
-        if (SystemInfo.supportsGyroscope && enableMobileGyro)
+        // Enable gyro on mobile if available and native XR is not handling tracking
+        if (SystemInfo.supportsGyroscope && enableMobileGyro && !IsNativeXRActive())
         {
             Input.gyro.enabled = true;
             isGyroSupported = true;
@@ -51,6 +64,13 @@ public class CardboardManager : MonoBehaviour
     {
         FindMainCamera();
         SetupStereoRig();
+
+        // If native OpenXR / Quest is active, native headset displays handle stereoscopy
+        if (IsNativeXRActive())
+        {
+            enableStereoSimulator = false;
+        }
+
         UpdateStereoMode(enableStereoSimulator);
     }
 
@@ -72,12 +92,19 @@ public class CardboardManager : MonoBehaviour
         var kb = Keyboard.current;
         if (kb != null)
         {
-            // Toggle Stereo Simulator
+            // Toggle Stereo Simulator (only when native OpenXR is not active)
             if (kb[toggleStereoKey].wasPressedThisFrame)
             {
-                enableStereoSimulator = !enableStereoSimulator;
-                UpdateStereoMode(enableStereoSimulator);
-                Debug.Log("[Cardboard] Stereo VR Simulator " + (enableStereoSimulator ? "ENABLED" : "DISABLED"));
+                if (IsNativeXRActive())
+                {
+                    Debug.Log("[VR] Native OpenXR / Quest display is active; stereo rendering is managed natively by the headset.");
+                }
+                else
+                {
+                    enableStereoSimulator = !enableStereoSimulator;
+                    UpdateStereoMode(enableStereoSimulator);
+                    Debug.Log("[Cardboard] Stereo VR Simulator " + (enableStereoSimulator ? "ENABLED" : "DISABLED"));
+                }
             }
 
             // Recenter view
@@ -203,6 +230,23 @@ public class CardboardManager : MonoBehaviour
             return true;
         }
 
+        // 5. OpenXR / Meta Quest Controller Trigger & Primary Action Buttons
+        var xrControllers = new List<UnityEngine.XR.InputDevice>();
+        UnityEngine.XR.InputDevices.GetDevicesWithCharacteristics(
+            UnityEngine.XR.InputDeviceCharacteristics.HeldInHand | UnityEngine.XR.InputDeviceCharacteristics.Controller, 
+            xrControllers);
+        foreach (var dev in xrControllers)
+        {
+            if (dev.TryGetFeatureValue(UnityEngine.XR.CommonUsages.triggerButton, out bool triggerDown) && triggerDown)
+            {
+                return true;
+            }
+            if (dev.TryGetFeatureValue(UnityEngine.XR.CommonUsages.primaryButton, out bool primaryDown) && primaryDown)
+            {
+                return true;
+            }
+        }
+
         return false;
     }
 
@@ -256,12 +300,22 @@ public class CardboardManager : MonoBehaviour
         style.fontSize = 12;
         style.normal.textColor = Color.white;
 
-        string mode = enableStereoSimulator ? "<color=#A7FFEB>STEREOSCOPIC (Split 3D)</color>" : "<color=#FFE082>MONOSCOPIC (Single)</color>";
-        string text = $"<b>[GOOGLE CARDBOARD READY]</b>  Mode: {mode}\n" +
-                      $"• <b>Mouse</b>: Look around  |  <b>[C]</b>: Toggle Stereo Dual-Eye  |  <b>[R]</b>: Recenter\n" +
-                      $"• <b>Gaze Dwell (1.5s)</b> or <b>Click/Tap</b>: Interact with Teacher & Buttons\n" +
-                      $"• <b>Click/Tap</b> (on open ground): Toss Breadcrumb for Birds  |  <b>[H]</b>: Toggle Help";
-
-        GUI.Box(new Rect(10, 10, 560, 70), text, style);
+        if (IsNativeXRActive())
+        {
+            string xrText = $"<b>[OPENXR / META QUEST ACTIVE]</b>\n" +
+                            $"• Native Head-Tracking & Stereoscopic Displays Active\n" +
+                            $"• Controller Trigger or Gaze Dwell (1.5s): Select / Interact with Teacher & Chalkboard\n" +
+                            $"• Controller Trigger / Click on Ground: Toss Breadcrumbs for Birds  |  <b>[H]</b>: Toggle HUD";
+            GUI.Box(new Rect(10, 10, 600, 65), xrText, style);
+        }
+        else
+        {
+            string mode = enableStereoSimulator ? "<color=#A7FFEB>STEREOSCOPIC (Split 3D)</color>" : "<color=#FFE082>MONOSCOPIC (Single)</color>";
+            string text = $"<b>[GOOGLE CARDBOARD READY / SIMULATOR]</b>  Mode: {mode}\n" +
+                          $"• <b>Mouse</b>: Look around  |  <b>[C]</b>: Toggle Stereo Dual-Eye  |  <b>[R]</b>: Recenter\n" +
+                          $"• <b>Gaze Dwell (1.5s)</b> or <b>Click/Tap</b>: Interact with Teacher & Buttons\n" +
+                          $"• <b>Click/Tap</b> (on open ground): Toss Breadcrumb for Birds  |  <b>[H]</b>: Toggle Help";
+            GUI.Box(new Rect(10, 10, 560, 70), text, style);
+        }
     }
 }

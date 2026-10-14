@@ -6666,7 +6666,7 @@ MonoBehaviour:
   col3DescTmp: {fileID: 64571193}
   col3ImageRend: {fileID: 1440388848}
   lessons:
-  - lessonTitle: American Sign Language (ASL)
+  - lessonTitle: South African Sign Language (SASL)
     lessonSubtitle: Everyday Greetings & Politeness
     shortSummary: 'Essential greetings: <b>HELLO</b>, <b>THANK YOU</b>, and <b>PLEASE</b>.'
     sign1:
@@ -20488,7 +20488,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "<b>Teacher Bot</b>\n<b>Lesson 1 of 7: American Sign Language (ASL)</b>\n<size=80%><color=#B0BEC5>Everyday
+  m_text: "<b>Teacher Bot</b>\n<b>Lesson 1 of 7: South African Sign Language (SASL)</b>\n<size=80%><color=#B0BEC5>Everyday
     Greetings & Politeness</color></size>\nEssential greetings: <b>HELLO</b>, <b>THANK
     YOU</b>, and <b>PLEASE</b>.\n\n<color=#FFE082>[A/\u2190] Prev   [D/\u2192] Next  
     [Space] Start Lesson</color>\n<size=75%><color=#90A4AE>[E] Close Dialogue</color></size>"

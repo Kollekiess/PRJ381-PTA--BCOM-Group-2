@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using UnityEngine;
 
 #if UNITY_EDITOR
@@ -9,20 +9,25 @@ public static class SignTextureGenerator
     [MenuItem("Tools/Generate Remaining Sign Textures")]
     public static void GenerateAll()
     {
-        string dir = "Assets/Textures/";
+        string dir = "Assets/V_Work/Textures/";
+        if (!Directory.Exists(dir)) dir = "Assets/Textures/";
         if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
 
-        GenerateSign(dir + "asl_sad.png", "SAD", 1);
-        GenerateSign(dir + "asl_love.png", "LOVE", 2);
-        GenerateSign(dir + "asl_who.png", "WHO", 3);
-        GenerateSign(dir + "asl_what.png", "WHAT", 4);
-        GenerateSign(dir + "asl_where.png", "WHERE", 5);
-        GenerateSign(dir + "asl_today.png", "TODAY", 6);
-        GenerateSign(dir + "asl_tomorrow.png", "TOMORROW", 7);
-        GenerateSign(dir + "asl_good.png", "GOOD", 8);
+        string[] prefixes = new string[] { "sasl_", "asl_" };
+        foreach (var p in prefixes)
+        {
+            GenerateSign(dir + p + "sad.png", "SAD", 1);
+            GenerateSign(dir + p + "love.png", "LOVE", 2);
+            GenerateSign(dir + p + "who.png", "WHO", 3);
+            GenerateSign(dir + p + "what.png", "WHAT", 4);
+            GenerateSign(dir + p + "where.png", "WHERE", 5);
+            GenerateSign(dir + p + "today.png", "TODAY", 6);
+            GenerateSign(dir + p + "tomorrow.png", "TOMORROW", 7);
+            GenerateSign(dir + p + "good.png", "GOOD", 8);
+        }
 
         AssetDatabase.Refresh();
-        Debug.Log("Generated all remaining sign textures!");
+        Debug.Log("Generated all remaining sign textures for SASL!");
     }
 
     private static void GenerateSign(string path, string title, int type)

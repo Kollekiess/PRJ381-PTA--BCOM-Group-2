@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using TMPro;
@@ -187,14 +187,22 @@ public class ChalkboardLesson : MonoBehaviour
 
     public void InitializeLessonsIfEmpty()
     {
-        if (lessons != null && lessons.Count >= 7) return;
+        if (lessons != null && lessons.Count >= 7)
+        {
+            // Auto-migrate any previously serialized ASL title to SASL
+            if (lessons[0] != null && lessons[0].lessonTitle != null && lessons[0].lessonTitle.Contains("ASL"))
+            {
+                lessons[0].lessonTitle = "South African Sign Language (SASL)";
+            }
+            return;
+        }
 
         lessons = new List<LessonData>();
 
         // Lesson 1: Everyday Greetings
         lessons.Add(new LessonData
         {
-            lessonTitle = "American Sign Language (ASL)",
+            lessonTitle = "South African Sign Language (SASL)",
             lessonSubtitle = "Everyday Greetings & Politeness",
             shortSummary = "Essential greetings: <b>HELLO</b>, <b>THANK YOU</b>, and <b>PLEASE</b>.",
             sign1 = new LessonSign { title = "1. HELLO", description = "Hand at temple\nextending outward\n(friendly salute)", imageTexture = LoadTex("asl_hello") },
@@ -269,15 +277,36 @@ public class ChalkboardLesson : MonoBehaviour
         });
     }
 
+    [ContextMenu("Reset / Reinitialize SASL Lessons")]
+    public void ResetToSASLLessons()
+    {
+        lessons = null;
+        InitializeLessonsIfEmpty();
+#if UNITY_EDITOR
+        UnityEditor.EditorUtility.SetDirty(this);
+#endif
+    }
+
     private Texture LoadTex(string baseName)
     {
 #if UNITY_EDITOR
         string[] exts = new string[] { ".jpg", ".png" };
-        foreach (var ext in exts)
+        string[] folders = new string[] { "Assets/V_Work/Textures/", "Assets/Textures/" };
+        foreach (var folder in folders)
         {
-            string path = $"Assets/Textures/{baseName}{ext}";
-            var tex = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture>(path);
-            if (tex != null) return tex;
+            foreach (var ext in exts)
+            {
+                string path = $"{folder}{baseName}{ext}";
+                var tex = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture>(path);
+                if (tex != null) return tex;
+
+                if (baseName.StartsWith("sasl_"))
+                {
+                    string fallback = $"{folder}{baseName.Replace("sasl_", "asl_")}{ext}";
+                    tex = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture>(fallback);
+                    if (tex != null) return tex;
+                }
+            }
         }
 #endif
         return null;
