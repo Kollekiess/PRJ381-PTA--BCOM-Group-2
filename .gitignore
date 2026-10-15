@@ -106,6 +106,6 @@ InitTestScene*.unity*
 /[Aa]ssets/[Ss]ceneDependencyCache*
 
 # Python webcam bridge
-HandTracking/.venv/
+HandTracking/.venv*/
 HandTracking/__pycache__/
 HandTracking/.pytest_cache/
