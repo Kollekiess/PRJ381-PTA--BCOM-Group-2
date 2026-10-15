@@ -4017,6 +4017,7 @@ GameObject:
   m_Component:
   - component: {fileID: 816784618}
   - component: {fileID: 816784619}
+  - component: {fileID: 816784620}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -4055,6 +4056,22 @@ MonoBehaviour:
   exitConfirmationPanel: {fileID: 459766332}
   levelNumberText: {fileID: 1882052648}
   toggleMenuKey: 27
+--- !u!114 &816784620
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 816784617}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1d80cc36b378471e92b647a7dfd14d5f, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::WebcamHandBridge
+  bridgeBaseUrl: http://127.0.0.1:8765
+  bridgeToken:
+  pollIntervalSeconds: 0.25
+  feedbackText: {fileID: 0}
 --- !u!1 &832575517
 GameObject:
   m_ObjectHideFlags: 0
@@ -7546,6 +7563,7 @@ GameObject:
   - component: {fileID: 1746674087}
   - component: {fileID: 1746674086}
   - component: {fileID: 1746674085}
+  - component: {fileID: 1746674089}
   - component: {fileID: 1746674084}
   - component: {fileID: 1746674083}
   m_Layer: 0
@@ -7699,6 +7717,20 @@ Transform:
   - {fileID: 330585546}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 180, z: 0}
+--- !u!114 &1746674089
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1746674082}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4e9d82c7ff9641ca907cebd91d0f7612, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::QuestHeadPoseDriver
+  headsetCamera: {fileID: 330585546}
+  desktopController: {fileID: 1746674083}
 --- !u!1001 &1792551887
 PrefabInstance:
   m_ObjectHideFlags: 0
