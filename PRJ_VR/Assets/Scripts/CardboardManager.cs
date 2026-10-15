@@ -175,16 +175,7 @@ public class CardboardManager : MonoBehaviour
 
     public bool IsTriggerPressedThisFrame()
     {
-        // 1. Official Google Cardboard XR Plugin Trigger
-#if !UNITY_EDITOR && (UNITY_ANDROID || UNITY_IOS)
-        try
-        {
-            if (Google.XR.Cardboard.Api.IsTriggerPressed) return true;
-        }
-        catch { }
-#endif
-
-        // 2. Mobile Touchscreen Tap (Cardboard conductive trigger taps screen)
+        // Mobile touchscreen tap (Cardboard conductive trigger taps screen).
         if (Touchscreen.current != null && Touchscreen.current.primaryTouch.press.wasPressedThisFrame)
         {
             return true;
@@ -208,13 +199,13 @@ public class CardboardManager : MonoBehaviour
 
     public void Recenter()
     {
-#if !UNITY_EDITOR && (UNITY_ANDROID || UNITY_IOS)
-        try
+        var xrSubsystems = new System.Collections.Generic.List<UnityEngine.XR.XRInputSubsystem>();
+        UnityEngine.SubsystemManager.GetSubsystems(xrSubsystems);
+        foreach (var xrSubsystem in xrSubsystems)
         {
-            Google.XR.Cardboard.Api.Recenter();
+            if (xrSubsystem.running && xrSubsystem.TryRecenter())
+                break;
         }
-        catch { }
-#endif
         if (isGyroSupported)
         {
             gyroInitialRotation = Input.gyro.attitude;
@@ -224,14 +215,7 @@ public class CardboardManager : MonoBehaviour
 
     public void CalibrateVR()
     {
-#if !UNITY_EDITOR && (UNITY_ANDROID || UNITY_IOS)
-        try
-        {
-            Google.XR.Cardboard.Api.ScanDeviceParams();
-        }
-        catch { }
-#endif
-        Debug.Log("[Cardboard] ScanDeviceParams requested for Cardboard profile calibration.");
+        Debug.Log("[Cardboard] Device-specific Cardboard calibration is unavailable in this build.");
     }
 
     private void ApplyMobileGyroRotation()

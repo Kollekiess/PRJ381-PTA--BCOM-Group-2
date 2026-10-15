@@ -39,9 +39,15 @@ For a wireless demonstration, use a trusted private network and rebuild the APK 
 
 The app manifest enables internet access and local cleartext HTTP. The Unity Android build targets Quest 2 (ARM64); Quest 3 hardware is not required. The headset uses OpenXR head pose. The Oculus Touch profile is enabled, but controller-driven gameplay is not implemented; hand detection runs on the Mac webcam.
 
+## Build and verification status
+
+The Quest 2 Android APK has been built successfully with Unity 6.3 LTS (6000.3.9f1). Unity's player build and Android Gradle release build both completed, and the generated APK passed an archive integrity check. It targets Android ARM64 and uses OpenXR. The APK is at `Builds/BCSignVR-Quest2.apk` after building.
+
+The physical Quest 2 is currently at campus and was not available for installation or runtime testing. Treat this as a prepared build, not a headset-verified release. The webcam bridge was tested on the Mac and detected a hand, but the observed letter prediction was low confidence.
+
 ## Current limits
 
 - The model is an existing group artifact for static letters A–Z. Accuracy and SASL linguistic validity are not independently verified by this bridge.
 - Lesson selection is a single letter entered on the laptop page; the bridge does not yet load lessons or save scores to the backend.
 - Dynamic signs, words, facial expression, body position and two-handed signs are not supported.
-- The Unity project has not yet completed a Quest Android build or been tested on the physical Quest 2.
+- The physical Quest 2 has not been used to verify installation, headset tracking, comfort, performance, or the webcam-to-headset connection.
