@@ -105,6 +105,22 @@ public class ChalkboardLesson : MonoBehaviour
         // Column 3 (Right)
         ApplySign(lesson.sign3, col3TitleTmp, col3DescTmp, col3ImageRend);
 
+        if (SASLScoreManager.Instance != null)
+        {
+            SASLScoreManager.Instance.SetActiveLesson(currentLessonIndex);
+            for (int i = 0; i < 3; i++)
+            {
+                if (SASLScoreManager.Instance.IsStepCompleted(currentLessonIndex, i))
+                {
+                    ApplyCompletedTitle(i);
+                }
+            }
+        }
+        if (ScoreHUD.Instance != null)
+        {
+            ScoreHUD.Instance.RefreshLessonPips();
+        }
+
         if (Application.isPlaying)
         {
             if (lessonCoroutine != null) StopCoroutine(lessonCoroutine);
@@ -113,6 +129,47 @@ public class ChalkboardLesson : MonoBehaviour
         else
         {
             SetAllMaxVisible(9999);
+        }
+    }
+
+    public string GetSignTitle(int signIndex)
+    {
+        if (lessons == null || currentLessonIndex >= lessons.Count) return $"Sign {signIndex + 1}";
+        var l = lessons[currentLessonIndex];
+        if (signIndex == 0 && l.sign1 != null) return l.sign1.title;
+        if (signIndex == 1 && l.sign2 != null) return l.sign2.title;
+        if (signIndex == 2 && l.sign3 != null) return l.sign3.title;
+        return $"Sign {signIndex + 1}";
+    }
+
+    public void MarkSignCompleted(int signIndex)
+    {
+        ApplyCompletedTitle(signIndex);
+        if (ScoreHUD.Instance != null)
+        {
+            ScoreHUD.Instance.RefreshLessonPips();
+        }
+    }
+
+    private void ApplyCompletedTitle(int signIndex)
+    {
+        string rawTitle = GetSignTitle(signIndex);
+        string markedTitle = $"<b><color=#81C784>[✓ COMPLETED]</color>\n{rawTitle}</b>";
+
+        if (signIndex == 0 && col1TitleTmp != null)
+        {
+            col1TitleTmp.text = markedTitle;
+            col1TitleTmp.ForceMeshUpdate();
+        }
+        else if (signIndex == 1 && col2TitleTmp != null)
+        {
+            col2TitleTmp.text = markedTitle;
+            col2TitleTmp.ForceMeshUpdate();
+        }
+        else if (signIndex == 2 && col3TitleTmp != null)
+        {
+            col3TitleTmp.text = markedTitle;
+            col3TitleTmp.ForceMeshUpdate();
         }
     }
 
@@ -180,6 +237,10 @@ public class ChalkboardLesson : MonoBehaviour
         for (int i = 0; i <= total; i++)
         {
             tmp.maxVisibleCharacters = i;
+            if (i > 0 && i < total && i % 2 == 0)
+            {
+                AudioManager.Instance?.PlayLessonTextTyping();
+            }
             yield return new WaitForSeconds(delay);
         }
         tmp.maxVisibleCharacters = total;

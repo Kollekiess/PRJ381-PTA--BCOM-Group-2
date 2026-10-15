@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 
@@ -15,7 +15,7 @@ public class ResponsiveUIConfigurator : MonoBehaviour
 
     [Header("Panels Sizing")]
     public Vector2 mainMenuSize = new Vector2(480f, 580f);
-    public Vector2 exitConfirmationSize = new Vector2(500f, 260f);
+    public Vector2 exitConfirmationSize = new Vector2(560f, 280f);
 
     void Awake()
     {
@@ -152,23 +152,25 @@ public class ResponsiveUIConfigurator : MonoBehaviour
                 prt.anchorMin = new Vector2(0.5f, 0.5f);
                 prt.anchorMax = new Vector2(0.5f, 0.5f);
                 prt.pivot = new Vector2(0.5f, 0.5f);
-                prt.anchoredPosition = new Vector2(0f, 40f);
-                prt.sizeDelta = new Vector2(440f, 50f);
+                prt.anchoredPosition = new Vector2(0f, 48f);
+                prt.sizeDelta = new Vector2(500f, 90f);
 
                 TextMeshProUGUI ptmp = promptT.GetComponent<TextMeshProUGUI>();
                 if (ptmp != null)
                 {
-                    ptmp.fontSize = 28f;
-                    ptmp.fontStyle = FontStyles.Bold;
+                    ptmp.text = "<b><size=120%>Exit Game?</size></b>\n\n<size=80%><color=#CFD8DC>Do you want to continue to exit or remain in the game?</color></size>";
+                    ptmp.fontSize = 24f;
+                    ptmp.fontStyle = FontStyles.Normal;
                     ptmp.alignment = TextAlignmentOptions.Center;
                     ptmp.enableAutoSizing = true;
-                    ptmp.fontSizeMin = 20f;
-                    ptmp.fontSizeMax = 32f;
+                    ptmp.fontSizeMin = 16f;
+                    ptmp.fontSizeMax = 28f;
+                    ptmp.raycastTarget = false;
                 }
             }
 
-            ConfigureButton(exitPanelT, "Confirm Button", new Vector2(-105f, -40f), new Vector2(170f, 52f), "Yes, Exit");
-            ConfigureButton(exitPanelT, "Cancel Button", new Vector2(105f, -40f), new Vector2(170f, 52f), "Cancel");
+            ConfigureButton(exitPanelT, "Confirm Button", new Vector2(-125f, -48f), new Vector2(210f, 54f), "Continue to Exit");
+            ConfigureButton(exitPanelT, "Cancel Button", new Vector2(125f, -48f), new Vector2(210f, 54f), "Remain in Game");
         }
     }
 
@@ -203,12 +205,13 @@ public class ResponsiveUIConfigurator : MonoBehaviour
             if (btmp != null)
             {
                 if (!string.IsNullOrEmpty(textLabel)) btmp.text = textLabel;
-                btmp.fontSize = 20f;
+                btmp.fontSize = 18f;
                 btmp.fontStyle = FontStyles.Bold;
                 btmp.alignment = TextAlignmentOptions.Center;
                 btmp.enableAutoSizing = true;
-                btmp.fontSizeMin = 14f;
-                btmp.fontSizeMax = 22f;
+                btmp.fontSizeMin = 13f;
+                btmp.fontSizeMax = 20f;
+                btmp.raycastTarget = false; // Never block parent button clicks
             }
         }
     }

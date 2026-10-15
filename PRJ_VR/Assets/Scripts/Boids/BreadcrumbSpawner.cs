@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.InputSystem;
 
 public class BreadcrumbSpawner : MonoBehaviour
@@ -32,20 +32,52 @@ public class BreadcrumbSpawner : MonoBehaviour
         }
     }
 
-    void Update()
-    {
-        var kb = Keyboard.current;
-        if (kb == null) return;
+    public const int MAX_BREADCRUMBS = 4;
 
-        if (kb.bKey.wasPressedThisFrame && Time.time >= lastThrowTime + cooldown)
-        {
-            lastThrowTime = Time.time;
-            TossBreadcrumb();
-        }
+    /// <summary>
+    /// Checks whether another breadcrumb can be summoned (under the 4 breadcrumb cap).
+    /// </summary>
+    public bool CanSpawnBreadcrumb()
+    {
+        return Breadcrumb.ActiveCrumbCount < MAX_BREADCRUMBS;
     }
 
-    public void TossBreadcrumb()
+    /// <summary>
+    /// Current count of active breadcrumbs in the scene.
+    /// </summary>
+    public int ActiveCrumbCount => Breadcrumb.ActiveCrumbCount;
+
+    void Update()
     {
+        // Breadcrumbs are strictly spawned via mouse clicks (aimed into environment) 
+        // and via the SASL VR gesture for 'Eat'.
+        // Keyboard B and Space keys do NOT summon breadcrumbs.
+    }
+
+    /// <summary>
+    /// Tosses a breadcrumb if under the maximum limit of 4 active breadcrumbs.
+    /// Returns true if a breadcrumb was successfully spawned, false if blocked by cap or cooldown.
+    /// </summary>
+    public bool TossBreadcrumb()
+    {
+        if (Time.time < lastThrowTime + cooldown)
+        {
+            return false;
+        }
+
+        // Strictly enforce maximum of 4 breadcrumbs in the scene at any time
+        if (Breadcrumb.ActiveCrumbCount >= MAX_BREADCRUMBS)
+        {
+            Debug.Log($"[BreadcrumbSpawner] Cannot spawn breadcrumb: Maximum limit of {MAX_BREADCRUMBS} reached ({Breadcrumb.ActiveCrumbCount}/{MAX_BREADCRUMBS}). Wait for birds to finish eating.");
+            if (ScoreHUD.Instance != null)
+            {
+                ScoreHUD.Instance.ShowToast($"Max {MAX_BREADCRUMBS} breadcrumbs active! Birds are feeding.");
+            }
+            return false;
+        }
+
+        lastThrowTime = Time.time;
+
         Transform cam = Camera.main != null ? Camera.main.transform : transform;
         Vector3 spawnPos = cam.position + cam.forward * 0.6f + Vector3.down * 0.25f;
         Vector3 throwDir = (cam.forward * throwForce + Vector3.up * throwUpwardForce).normalized * throwForce;
@@ -69,7 +101,13 @@ public class BreadcrumbSpawner : MonoBehaviour
             rb.angularVelocity = Random.insideUnitSphere * 8f;
         }
 
-        Debug.Log("[Breadcrumb] Tossed bread crumb at " + spawnPos);
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.PlayBreadToss(spawnPos);
+        }
+
+        Debug.Log($"[BreadcrumbSpawner] Tossed breadcrumb ({Breadcrumb.ActiveCrumbCount}/{MAX_BREADCRUMBS} active) at {spawnPos}");
+        return true;
     }
 
     private GameObject CreateProceduralBreadcrumb(Vector3 pos)

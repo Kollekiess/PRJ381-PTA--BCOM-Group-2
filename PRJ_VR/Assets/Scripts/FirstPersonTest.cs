@@ -50,6 +50,13 @@ public class FirstPersonController : MonoBehaviour
 
     void Update()
     {
+        // When pause menu is open, disable camera look and movement to free mouse for UI
+        if (GameManager.Instance != null && GameManager.Instance.IsMenuOpen)
+        {
+            moveInput = Vector2.zero;
+            return;
+        }
+
         //Capture Mouse Input in Update
         HandleLook();
         HandleMovementInput();
@@ -61,7 +68,7 @@ public class FirstPersonController : MonoBehaviour
         // Jump input using Keyboard.current
         if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame && isGrounded)
         {
-        rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
+            rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
         }
     }
 
@@ -73,6 +80,9 @@ public class FirstPersonController : MonoBehaviour
 
     void HandleLook()
     {
+        // When native XR is active (Meta Quest / OpenXR), head tracking drives camera rotation
+        if (CardboardManager.IsNativeXRActive()) return;
+
         if (playerCamera == null || Mouse.current == null) return;
 
         // Read mouse delta using New Input System

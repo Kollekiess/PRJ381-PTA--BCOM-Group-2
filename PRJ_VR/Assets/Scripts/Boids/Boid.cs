@@ -39,6 +39,7 @@ public class Boid : MonoBehaviour
     private float peckTimer = 0f;
     private bool isPeckingDown = false;
     private float peckSubTimer = 0f;
+    private float chirpCooldownTimer = 0f;
 
     void Awake()
     {
@@ -88,6 +89,20 @@ public class Boid : MonoBehaviour
         if (manager == null) return;
         if (playerTransform == null) FindPlayer();
         if (wingAnimator == null) wingAnimator = GetComponentInChildren<BirdWingAnimator>();
+
+        // Natural intermittent chirping
+        chirpCooldownTimer -= Time.deltaTime;
+        if (chirpCooldownTimer <= 0f)
+        {
+            chirpCooldownTimer = Random.Range(8f, 20f);
+            if (Camera.main != null && Vector3.Distance(transform.position, Camera.main.transform.position) < 28f)
+            {
+                if (AudioManager.Instance != null)
+                {
+                    AudioManager.Instance.PlayBirdChirp(transform.position);
+                }
+            }
+        }
 
         switch (currentState)
         {
@@ -394,6 +409,11 @@ public class Boid : MonoBehaviour
         {
             wingAnimator.SetWingsFolded(false);
             wingAnimator.SetPanicFlap(true);
+        }
+
+        if (AudioManager.Instance != null && Camera.main != null && Vector3.Distance(transform.position, Camera.main.transform.position) < 30f)
+        {
+            AudioManager.Instance.PlayBirdFlap(transform.position);
         }
 
         velocity = fleeDirection * (manager.maxSpeed * 1.4f);

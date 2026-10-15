@@ -3,6 +3,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.XR;
 using System.Collections.Generic;
 
+// OpenXR native VR support enabled
 public class CardboardManager : MonoBehaviour
 {
     public static CardboardManager Instance { get; private set; }
@@ -223,14 +224,64 @@ public class CardboardManager : MonoBehaviour
             return true;
         }
 
-        // 4. Keyboard Space / Enter (Accessibility & testing)
+        // 4. Keyboard Enter (Accessibility & testing - Space is reserved strictly for player jumping)
         var kb = Keyboard.current;
-        if (kb != null && (kb.spaceKey.wasPressedThisFrame || kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame))
+        if (kb != null && (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame))
         {
             return true;
         }
 
         // 5. OpenXR / Meta Quest Controller Trigger & Primary Action Buttons
+        var xrControllers = new List<UnityEngine.XR.InputDevice>();
+        UnityEngine.XR.InputDevices.GetDevicesWithCharacteristics(
+            UnityEngine.XR.InputDeviceCharacteristics.HeldInHand | UnityEngine.XR.InputDeviceCharacteristics.Controller, 
+            xrControllers);
+        foreach (var dev in xrControllers)
+        {
+            if (dev.TryGetFeatureValue(UnityEngine.XR.CommonUsages.triggerButton, out bool triggerDown) && triggerDown)
+            {
+                return true;
+            }
+            if (dev.TryGetFeatureValue(UnityEngine.XR.CommonUsages.primaryButton, out bool primaryDown) && primaryDown)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Checks if mouse left button was pressed this frame.
+    /// </summary>
+    public bool IsMouseClickThisFrame()
+    {
+        if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame) return true;
+#if ENABLE_LEGACY_INPUT_MANAGER
+        if (Input.GetMouseButtonDown(0)) return true;
+#endif
+        return false;
+    }
+
+    /// <summary>
+    /// Checks if a non-keyboard controller or touch trigger was pressed this frame.
+    /// Excludes desktop keyboard keys.
+    /// </summary>
+    public bool IsControllerOrTouchTriggerPressedThisFrame()
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        try
+        {
+            if (Google.XR.Cardboard.Api.IsTriggerPressed) return true;
+        }
+        catch { }
+#endif
+
+        if (Touchscreen.current != null && Touchscreen.current.primaryTouch.press.wasPressedThisFrame)
+        {
+            return true;
+        }
+
         var xrControllers = new List<UnityEngine.XR.InputDevice>();
         UnityEngine.XR.InputDevices.GetDevicesWithCharacteristics(
             UnityEngine.XR.InputDeviceCharacteristics.HeldInHand | UnityEngine.XR.InputDeviceCharacteristics.Controller, 

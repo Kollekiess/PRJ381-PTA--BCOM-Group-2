@@ -1,9 +1,21 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class Breadcrumb : MonoBehaviour
 {
     public static List<Breadcrumb> allCrumbs = new List<Breadcrumb>();
+
+    /// <summary>
+    /// Current count of valid, non-destroyed breadcrumbs in the scene.
+    /// </summary>
+    public static int ActiveCrumbCount
+    {
+        get
+        {
+            allCrumbs.RemoveAll(c => c == null);
+            return allCrumbs.Count;
+        }
+    }
 
     [Header("Breadcrumb Settings")]
     public bool isLanded = false;
@@ -27,12 +39,20 @@ public class Breadcrumb : MonoBehaviour
 
     void OnEnable()
     {
+        allCrumbs.RemoveAll(c => c == null);
         if (!allCrumbs.Contains(this)) allCrumbs.Add(this);
     }
 
     void OnDisable()
     {
         allCrumbs.Remove(this);
+        allCrumbs.RemoveAll(c => c == null);
+    }
+
+    void OnDestroy()
+    {
+        allCrumbs.Remove(this);
+        allCrumbs.RemoveAll(c => c == null);
     }
 
     void OnCollisionEnter(Collision col)
@@ -45,6 +65,11 @@ public class Breadcrumb : MonoBehaviour
             {
                 rb.linearDamping = 5f;
                 rb.angularDamping = 5f;
+            }
+
+            if (AudioManager.Instance != null)
+            {
+                AudioManager.Instance.PlayBreadImpact(transform.position);
             }
         }
     }
