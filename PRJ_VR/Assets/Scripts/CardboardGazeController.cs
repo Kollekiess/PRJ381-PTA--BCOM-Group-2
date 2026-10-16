@@ -130,7 +130,7 @@ public class CardboardGazeController : MonoBehaviour
                 timer = 0f;
             }
 
-            timer += Time.deltaTime;
+            timer += Time.unscaledDeltaTime;
 
             if (gazeProgressRing != null)
             {
@@ -153,6 +153,24 @@ public class CardboardGazeController : MonoBehaviour
 
     void HandleTrigger()
     {
+        // When pause menu is open, mouse clicks are used directly for UI interaction
+        if (GameManager.Instance != null && GameManager.Instance.IsMenuOpen)
+        {
+            return;
+        }
+
+        bool isMouseClick = false;
+        if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
+        {
+            isMouseClick = true;
+        }
+#if ENABLE_LEGACY_INPUT_MANAGER
+        if (!isMouseClick && Input.GetMouseButtonDown(0))
+        {
+            isMouseClick = true;
+        }
+#endif
+
         bool isTriggered = false;
 
         if (CardboardManager.Instance != null)
@@ -162,7 +180,7 @@ public class CardboardGazeController : MonoBehaviour
         else
         {
             if (Touchscreen.current != null && Touchscreen.current.primaryTouch.press.wasPressedThisFrame) isTriggered = true;
-            else if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame) isTriggered = true;
+            else if (isMouseClick) isTriggered = true;
         }
 
         if (isTriggered)
@@ -174,7 +192,15 @@ public class CardboardGazeController : MonoBehaviour
             }
             else
             {
-                if (breadcrumbSpawner != null)
+                // Bread is only spawned in via mouse click (or VR controller trigger / touch tap)
+                // NEVER via keyboard keys (Space, Enter, etc.)
+                bool isValidBreadTrigger = isMouseClick;
+                if (!isValidBreadTrigger && CardboardManager.Instance != null)
+                {
+                    isValidBreadTrigger = CardboardManager.Instance.IsControllerOrTouchTriggerPressedThisFrame();
+                }
+
+                if (isValidBreadTrigger && breadcrumbSpawner != null)
                 {
                     breadcrumbSpawner.TossBreadcrumb();
                 }

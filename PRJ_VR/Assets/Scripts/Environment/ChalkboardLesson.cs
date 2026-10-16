@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using TMPro;
@@ -105,6 +105,22 @@ public class ChalkboardLesson : MonoBehaviour
         // Column 3 (Right)
         ApplySign(lesson.sign3, col3TitleTmp, col3DescTmp, col3ImageRend);
 
+        if (SASLScoreManager.Instance != null)
+        {
+            SASLScoreManager.Instance.SetActiveLesson(currentLessonIndex);
+            for (int i = 0; i < 3; i++)
+            {
+                if (SASLScoreManager.Instance.IsStepCompleted(currentLessonIndex, i))
+                {
+                    ApplyCompletedTitle(i);
+                }
+            }
+        }
+        if (ScoreHUD.Instance != null)
+        {
+            ScoreHUD.Instance.RefreshLessonPips();
+        }
+
         if (Application.isPlaying)
         {
             if (lessonCoroutine != null) StopCoroutine(lessonCoroutine);
@@ -113,6 +129,47 @@ public class ChalkboardLesson : MonoBehaviour
         else
         {
             SetAllMaxVisible(9999);
+        }
+    }
+
+    public string GetSignTitle(int signIndex)
+    {
+        if (lessons == null || currentLessonIndex >= lessons.Count) return $"Sign {signIndex + 1}";
+        var l = lessons[currentLessonIndex];
+        if (signIndex == 0 && l.sign1 != null) return l.sign1.title;
+        if (signIndex == 1 && l.sign2 != null) return l.sign2.title;
+        if (signIndex == 2 && l.sign3 != null) return l.sign3.title;
+        return $"Sign {signIndex + 1}";
+    }
+
+    public void MarkSignCompleted(int signIndex)
+    {
+        ApplyCompletedTitle(signIndex);
+        if (ScoreHUD.Instance != null)
+        {
+            ScoreHUD.Instance.RefreshLessonPips();
+        }
+    }
+
+    private void ApplyCompletedTitle(int signIndex)
+    {
+        string rawTitle = GetSignTitle(signIndex);
+        string markedTitle = $"<b><color=#81C784>[✓ COMPLETED]</color>\n{rawTitle}</b>";
+
+        if (signIndex == 0 && col1TitleTmp != null)
+        {
+            col1TitleTmp.text = markedTitle;
+            col1TitleTmp.ForceMeshUpdate();
+        }
+        else if (signIndex == 1 && col2TitleTmp != null)
+        {
+            col2TitleTmp.text = markedTitle;
+            col2TitleTmp.ForceMeshUpdate();
+        }
+        else if (signIndex == 2 && col3TitleTmp != null)
+        {
+            col3TitleTmp.text = markedTitle;
+            col3TitleTmp.ForceMeshUpdate();
         }
     }
 
@@ -180,6 +237,10 @@ public class ChalkboardLesson : MonoBehaviour
         for (int i = 0; i <= total; i++)
         {
             tmp.maxVisibleCharacters = i;
+            if (i > 0 && i < total && i % 2 == 0)
+            {
+                AudioManager.Instance?.PlayLessonTextTyping();
+            }
             yield return new WaitForSeconds(delay);
         }
         tmp.maxVisibleCharacters = total;
@@ -187,14 +248,22 @@ public class ChalkboardLesson : MonoBehaviour
 
     public void InitializeLessonsIfEmpty()
     {
-        if (lessons != null && lessons.Count >= 7) return;
+        if (lessons != null && lessons.Count >= 7)
+        {
+            // Auto-migrate any previously serialized ASL title to SASL
+            if (lessons[0] != null && lessons[0].lessonTitle != null && lessons[0].lessonTitle.Contains("ASL"))
+            {
+                lessons[0].lessonTitle = "South African Sign Language (SASL)";
+            }
+            return;
+        }
 
         lessons = new List<LessonData>();
 
         // Lesson 1: Everyday Greetings
         lessons.Add(new LessonData
         {
-            lessonTitle = "American Sign Language (ASL)",
+            lessonTitle = "South African Sign Language (SASL)",
             lessonSubtitle = "Everyday Greetings & Politeness",
             shortSummary = "Essential greetings: <b>HELLO</b>, <b>THANK YOU</b>, and <b>PLEASE</b>.",
             sign1 = new LessonSign { title = "1. HELLO", description = "Hand at temple\nextending outward\n(friendly salute)", imageTexture = LoadTex("asl_hello") },
@@ -269,15 +338,36 @@ public class ChalkboardLesson : MonoBehaviour
         });
     }
 
+    [ContextMenu("Reset / Reinitialize SASL Lessons")]
+    public void ResetToSASLLessons()
+    {
+        lessons = null;
+        InitializeLessonsIfEmpty();
+#if UNITY_EDITOR
+        UnityEditor.EditorUtility.SetDirty(this);
+#endif
+    }
+
     private Texture LoadTex(string baseName)
     {
 #if UNITY_EDITOR
         string[] exts = new string[] { ".jpg", ".png" };
-        foreach (var ext in exts)
+        string[] folders = new string[] { "Assets/V_Work/Textures/", "Assets/Textures/" };
+        foreach (var folder in folders)
         {
-            string path = $"Assets/Textures/{baseName}{ext}";
-            var tex = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture>(path);
-            if (tex != null) return tex;
+            foreach (var ext in exts)
+            {
+                string path = $"{folder}{baseName}{ext}";
+                var tex = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture>(path);
+                if (tex != null) return tex;
+
+                if (baseName.StartsWith("sasl_"))
+                {
+                    string fallback = $"{folder}{baseName.Replace("sasl_", "asl_")}{ext}";
+                    tex = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture>(fallback);
+                    if (tex != null) return tex;
+                }
+            }
         }
 #endif
         return null;
