@@ -12,6 +12,10 @@ from pathlib import Path
 
 import cv2
 import mediapipe as mp
+try:
+    import numpy as np
+except ImportError:  # The template fallback still works without NumPy.
+    np = None
 
 
 class SequenceRecognizer:
@@ -140,6 +144,56 @@ class AlphabetTemplateRecognizer:
         return "TEAM_SASL_" + stable_label, min(1.0, confidence)
 
 
+class DenseAlphabetRecognizer:
+    """NumPy inference for the team's exported 63-128-64-26 Keras model."""
+    MIN_CONFIDENCE = .60
+    MIN_MARGIN = .12
+
+    def __init__(self, weights_path: Path | None, labels_path: Path | None):
+        self.weights = None
+        self.labels = []
+        self.history = deque(maxlen=7)
+        if np is None or not weights_path or not weights_path.exists() or not labels_path or not labels_path.exists():
+            return
+        try:
+            archive = np.load(weights_path)
+            self.weights = {key: archive[key] for key in archive.files}
+            archive.close()
+            self.labels = json.loads(labels_path.read_text())
+            if len(self.labels) != 26 or any(self.weights[key].shape != shape for key, shape in {
+                    "w1": (63, 128), "b1": (128,), "w2": (128, 64), "b2": (64,),
+                    "w3": (64, 26), "b3": (26,)}.items()):
+                self.weights = None
+        except (OSError, ValueError, KeyError, TypeError):
+            self.weights = None
+
+    def update(self, landmarks):
+        if self.weights is None:
+            return "MODEL_UNAVAILABLE", 0.0
+        try:
+            x = np.asarray(AlphabetTemplateRecognizer.features(landmarks), dtype=np.float32)
+            w = self.weights
+            x = np.maximum(0, x @ w["w1"] + w["b1"])
+            x = np.maximum(0, x @ w["w2"] + w["b2"])
+            logits = x @ w["w3"] + w["b3"]
+            logits -= np.max(logits)
+            probabilities = np.exp(logits)
+            probabilities /= np.sum(probabilities)
+        except (AttributeError, TypeError, ValueError, OverflowError):
+            self.history.clear()
+            return "UNKNOWN", 0.0
+        order = np.argsort(probabilities)[::-1]
+        best, second = int(order[0]), int(order[1])
+        confidence = float(probabilities[best])
+        if confidence < self.MIN_CONFIDENCE or confidence - float(probabilities[second]) < self.MIN_MARGIN:
+            self.history.clear()
+            return "UNKNOWN", 0.0
+        self.history.append(self.labels[best])
+        stable = max(set(self.history), key=self.history.count)
+        stability = self.history.count(stable) / len(self.history)
+        return "TEAM_SASL_" + stable, min(1.0, confidence * stability)
+
+
 def landmark_values(landmarks):
     points = [[float(point.x), float(point.y), float(point.z)]
               for point in landmarks.landmark]
@@ -223,6 +277,10 @@ def main() -> None:
                         "unity/Assets/Resources/sasl_sequence_model.json")
     parser.add_argument("--alphabet-model", type=Path, default=Path(__file__).resolve().parents[1] /
                         "ml/team_sasl/sasl_templates.json")
+    parser.add_argument("--alphabet-weights", type=Path, default=Path(__file__).resolve().parents[1] /
+                        "ml/team_sasl/sasl_dense_weights.npz")
+    parser.add_argument("--alphabet-labels", type=Path, default=Path(__file__).resolve().parents[1] /
+                        "ml/team_sasl/sasl_labels.json")
     args = parser.parse_args()
 
     camera = cv2.VideoCapture(str(args.video)) if args.video else open_camera(args.camera)
@@ -239,7 +297,9 @@ def main() -> None:
     hands_api = mp.solutions.hands
     recording = args.record.open("a", encoding="utf-8") if args.record else None
     recognizer = SequenceRecognizer(args.model)
-    alphabet_recognizer = AlphabetTemplateRecognizer(args.alphabet_model)
+    alphabet_recognizer = DenseAlphabetRecognizer(args.alphabet_weights, args.alphabet_labels)
+    if alphabet_recognizer.weights is None:
+        alphabet_recognizer = AlphabetTemplateRecognizer(args.alphabet_model)
 
     def tracking_lost():
         recognizer.reset()
@@ -290,7 +350,7 @@ def main() -> None:
                     # every detected hand in recordings for two-handed SASL signs.
                     packet["hands"] = [
                         {"handedness": label,
-                         "landmarks": [{"x": point.x, "y": point.y, "z": point.z}
+                         "landmarks": [{"x": point[0], "y": point[1], "z": point[2]}
                                        for point in landmark_values(item)]}
                         for item, label in zip(result.multi_hand_landmarks, labels)
                     ]

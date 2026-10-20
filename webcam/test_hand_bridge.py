@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from hand_bridge import (AlphabetTemplateRecognizer, packet_for, read_camera_frame,
+from hand_bridge import (AlphabetTemplateRecognizer, DenseAlphabetRecognizer, packet_for, read_camera_frame,
                          select_primary_hand, SequenceRecognizer)
 
 
@@ -110,6 +110,10 @@ class AlphabetTemplateTests(unittest.TestCase):
 
     def test_missing_team_templates_are_explicitly_unavailable(self):
         recognizer = AlphabetTemplateRecognizer(None)
+        self.assertEqual(("MODEL_UNAVAILABLE", 0.0), recognizer.update(example_hand()))
+
+    def test_dense_model_missing_weights_is_explicitly_unavailable(self):
+        recognizer = DenseAlphabetRecognizer(None, None)
         self.assertEqual(("MODEL_UNAVAILABLE", 0.0), recognizer.update(example_hand()))
 
 

@@ -15,11 +15,13 @@ fi
 if [[ -x "$PROJECT_ROOT/.venv/bin/python" ]] && ! pgrep -f "webcam/hand_bridge.py" >/dev/null 2>&1; then
   (
     while true; do
-      "$PROJECT_ROOT/.venv/bin/python" "$PROJECT_ROOT/webcam/hand_bridge.py" >>"$WEBCAM_LOG" 2>&1
-      status=$?
-      [[ $status -eq 0 ]] && break
-      print "Webcam tracker stopped ($status); retrying in 2 seconds." >>"$WEBCAM_LOG"
-      sleep 2
+      if "$PROJECT_ROOT/.venv/bin/python" "$PROJECT_ROOT/webcam/hand_bridge.py" >>"$WEBCAM_LOG" 2>&1; then
+        break
+      else
+        status=$?
+        print "Webcam tracker stopped ($status); retrying in 2 seconds." >>"$WEBCAM_LOG"
+        sleep 2
+      fi
     done
   ) &
 fi
