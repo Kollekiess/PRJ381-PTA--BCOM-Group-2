@@ -1,0 +1,9 @@
+{
+  "name": "BCSignVR.Tests",
+  "rootNamespace": "BCSignVR.Tests",
+  "references": ["BCSignVR.Runtime"],
+  "optionalUnityReferences": ["TestAssemblies"],
+  "includePlatforms": ["Editor"],
+  "autoReferenced": false
+}
+

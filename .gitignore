@@ -1,0 +1,31 @@
+# Unity generated files
+unity/[Ll]ibrary/
+unity/[Tt]emp/
+unity/[Oo]bj/
+unity/[Bb]uild/
+unity/[Bb]uilds/
+unity/[Ll]ogs/
+unity/[Uu]ser[Ss]ettings/
+unity/MemoryCaptures/
+unity/Recordings/
+unity/*.csproj
+unity/*.sln*
+
+# Local backend state
+backend/data/*.sqlite3
+backend/data/*.sqlite3-*
+backend/.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+webcam/recordings/
+ml/data/
+ml/models/
+
+# macOS / IDE
+.DS_Store
+.idea/
+.vscode/
+

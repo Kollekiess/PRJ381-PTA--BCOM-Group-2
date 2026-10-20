@@ -1,0 +1,15 @@
+{
+  "name": "BCSignVR.Editor",
+  "rootNamespace": "BCSignVR.Editor",
+  "references": [
+    "BCSignVR.Runtime",
+    "Unity.XR.Management",
+    "Unity.XR.Management.Editor",
+    "Unity.XR.OpenXR",
+    "Unity.XR.OpenXR.Editor",
+    "Unity.XR.Hands"
+  ],
+  "includePlatforms": ["Editor"],
+  "autoReferenced": true
+}
+
