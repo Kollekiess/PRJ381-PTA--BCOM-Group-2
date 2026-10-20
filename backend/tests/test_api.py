@@ -45,7 +45,8 @@ class ApiTests(unittest.TestCase):
 
         status, lessons = self.request("GET", "/api/lessons")
         self.assertEqual(200, status)
-        self.assertGreaterEqual(len(lessons["lessons"]), 3)
+        self.assertGreaterEqual(len(lessons["lessons"]), 30)
+        self.assertIn("alphabet-a", {lesson["id"] for lesson in lessons["lessons"]})
 
         status, saved = self.request("POST", "/api/sessions", {"lessonId": "prototype-open", "accuracy": 0.92, "durationSeconds": 12.4, "mistakes": 1, "completed": True}, token)
         self.assertEqual(201, status)
@@ -87,6 +88,19 @@ class ApiTests(unittest.TestCase):
         status, other = self.request("POST", "/api/sessions", attempt, second_user)
         self.assertEqual(201, status)
         self.assertNotEqual(first["id"], other["id"])
+
+    def test_reference_alphabet_attempt_can_be_synced(self):
+        token = self.register("alphabet@example.org")
+        status, saved = self.request("POST", "/api/sessions", {
+            "id": "alphabet-attempt-a",
+            "lessonId": "alphabet-a",
+            "accuracy": .81,
+            "durationSeconds": 6.0,
+            "mistakes": 1,
+            "completed": True,
+        }, token)
+        self.assertEqual(201, status)
+        self.assertTrue(saved["saved"])
 
     def test_invalid_session_ids_nonfinite_metrics_and_nonobject_json_are_rejected(self):
         token = self.register("validation@example.org")

@@ -75,6 +75,24 @@ SEED_LESSONS = (
 )
 
 
+def _reference_lesson_seeds():
+    """Return stable lesson rows for the local alphabet/reference curriculum."""
+    alphabet = [
+        (f"alphabet-{letter.lower()}", f"SASL fingerspelling: {letter}",
+         "alphabet", "beginner",
+         f"Practise the NID SASL fingerspelling reference for letter {letter}.",
+         json.dumps([f"TEAM_SASL_{letter}"]), "reference",
+         "https://nid.org.za/resources/")
+        for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    ]
+    alphabet.append((
+        "basic-greeting", "Beginner greeting practice", "phrases", "beginner",
+        "Watch the attributed reference and practise the movement. This is visual practice until a reviewed phrase model is available.",
+        json.dumps(["REFERENCE_GREETING"]), "reference", "https://nid.org.za/resources/"
+    ))
+    return tuple(alphabet)
+
+
 class Database:
     def __init__(self, path: str | Path):
         self.path = Path(path)
@@ -106,7 +124,7 @@ class Database:
                 """INSERT OR IGNORE INTO lessons
                    (id,title,category,difficulty,description,gesture_labels,content_status,source_url)
                    VALUES (?,?,?,?,?,?,?,?)""",
-                SEED_LESSONS,
+                SEED_LESSONS + _reference_lesson_seeds(),
             )
 
     def one(self, sql: str, parameters=()):

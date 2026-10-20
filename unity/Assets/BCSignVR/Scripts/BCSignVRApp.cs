@@ -205,7 +205,10 @@ namespace BCSignVR
             {
                 history.Add(new LocalSessionRecord { lessonId = "alphabet-" + letter.ToLowerInvariant(), accuracy = accuracy,
                     durationSeconds = Mathf.Max(0, Time.time - lessonStarted), mistakes = alphabetMistakes, completed = true,
-                    synced = true, inputSource = accuracy > 0 ? "webcam-sasl-research" : "reference" });
+                    // Reference practice is intentionally local-only; a confident
+                    // webcam match is a scored attempt and must enter the upload
+                    // queue so the seeded alphabet lesson can be recorded.
+                    synced = accuracy <= 0f, inputSource = accuracy > 0 ? "webcam-sasl-research" : "reference" });
                 saveStatus = "Alphabet practice saved on this Mac";
             }
             catch (Exception error) { Debug.LogWarning(error.Message); }
