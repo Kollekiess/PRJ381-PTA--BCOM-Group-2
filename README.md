@@ -70,6 +70,10 @@ The classroom launcher keeps retrying the MediaPipe bridge if the camera tempora
 
 Run `./scripts/run_mac_simulator.sh`. It starts the local API when needed, opens Meta XR Simulator, and launches the Mac build against that OpenXR runtime without changing the Mac's global runtime setting.
 
+Run `./scripts/run_all_tests.sh` before pushing changes. It runs the backend,
+webcam, ML and Unity EditMode suites and writes the Unity XML result to your
+temporary directory.
+
 In Meta XR Simulator choose the Quest 3 device profile and use its input panel to drive both hands. Select **VR hands** on the classroom input screen. There is no automatic fallback to demo when real tracking disappears.
 
 The installed Meta XR Simulator `201.0` supports keyboard/mouse simulated hands. The app's MediaPipe bridge provides webcam hands independently of that version. Meta's own built-in webcam camera tracking requires Meta XR Simulator `207` or newer.
