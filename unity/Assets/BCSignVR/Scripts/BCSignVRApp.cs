@@ -159,6 +159,7 @@ namespace BCSignVR
 
         void UpdateAlphabet()
         {
+            var letter = ((char)('A' + alphabetIndex)).ToString();
             current.tracked = false;
             if (inputMode == InputMode.Camera) webcam.TryGetRightHand(current);
             else if (inputMode == InputMode.VR) openXr.TryGetRightHand(current);
@@ -167,7 +168,12 @@ namespace BCSignVR
                 Quaternion.Euler(0, 180, 0), .90f);
             trackingText.text = current.tracked ? "YOUR HAND  /  LIVE" : inputMode == InputMode.Camera && !webcam.IsReceiving ?
                 "CAMERA  /  WAITING" : "YOUR HAND  /  NOT VISIBLE";
-            alphabetStatus.text = current.tracked
+            var expected = "TEAM_SASL_" + letter;
+            if (current.tracked && webcam.RecognizedLabel == expected)
+                alphabetStatus.text = $"Bob sees {letter}  /  research match {webcam.RecognitionConfidence:P0}. Compare the example, then save practice.";
+            else if (current.tracked && webcam.RecognizedLabel.StartsWith("TEAM_SASL_"))
+                alphabetStatus.text = $"Bob sees {webcam.RecognizedLabel.Replace("TEAM_SASL_", "")}. Adjust your hand to match {letter}, then try again.";
+            else alphabetStatus.text = current.tracked
                 ? "Hand visible. Compare it with Bob's example, then choose Practised."
                 : inputMode == InputMode.Camera ? webcam.IsReceiving ? "Camera ready. Show your full hand to the webcam." :
                 "Camera is not sending frames yet. Allow Camera access, then keep this lesson open." : "Raise your hand in front of you.";
@@ -182,11 +188,13 @@ namespace BCSignVR
                 return;
             }
             var letter = ((char)('A' + alphabetIndex)).ToString();
+            var accuracy = inputMode == InputMode.Camera && webcam.RecognizedLabel == "TEAM_SASL_" + letter
+                ? webcam.RecognitionConfidence : 0f;
             try
             {
-                history.Add(new LocalSessionRecord { lessonId = "alphabet-" + letter.ToLowerInvariant(), accuracy = 0,
+                history.Add(new LocalSessionRecord { lessonId = "alphabet-" + letter.ToLowerInvariant(), accuracy = accuracy,
                     durationSeconds = Mathf.Max(0, Time.time - lessonStarted), mistakes = 0, completed = true,
-                    synced = true, inputSource = "reference" });
+                    synced = true, inputSource = accuracy > 0 ? "webcam-sasl-research" : "reference" });
                 saveStatus = "Alphabet practice saved on this Mac";
             }
             catch (Exception error) { Debug.LogWarning(error.Message); }

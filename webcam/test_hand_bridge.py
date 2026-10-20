@@ -2,7 +2,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from hand_bridge import packet_for, read_camera_frame, select_primary_hand, SequenceRecognizer
+from hand_bridge import (AlphabetTemplateRecognizer, packet_for, read_camera_frame,
+                         select_primary_hand, SequenceRecognizer)
 
 
 def example_hand():
@@ -100,6 +101,16 @@ class RecognizerTests(unittest.TestCase):
     def test_malformed_model_sequence_is_not_a_match(self):
         self.recognizer.classes = [prototype("BAD", self.expected[:-1])]
         self.assertEqual(("UNKNOWN", 0.0), self.warm_up())
+
+
+class AlphabetTemplateTests(unittest.TestCase):
+    def test_team_template_features_have_expected_shape(self):
+        recognizer = AlphabetTemplateRecognizer(None)
+        self.assertEqual(63, len(recognizer.features(example_hand())))
+
+    def test_missing_team_templates_are_explicitly_unavailable(self):
+        recognizer = AlphabetTemplateRecognizer(None)
+        self.assertEqual(("MODEL_UNAVAILABLE", 0.0), recognizer.update(example_hand()))
 
 
 class CameraReadTests(unittest.TestCase):

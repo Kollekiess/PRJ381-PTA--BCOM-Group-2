@@ -92,6 +92,54 @@ class SequenceRecognizer:
         return label, min(1.0, confidence)
 
 
+class AlphabetTemplateRecognizer:
+    """Conservative A-Z baseline using the team's reviewed templates."""
+    MIN_DISTANCE = .32
+    MIN_MARGIN = .045
+
+    def __init__(self, model_path: Path | None):
+        self.templates = {}
+        self.history = deque(maxlen=7)
+        if model_path and model_path.exists():
+            try:
+                raw = json.loads(model_path.read_text())
+                self.templates = {str(label): [float(value) for value in values]
+                                  for label, values in raw.items()
+                                  if isinstance(values, list) and len(values) == 63}
+            except (OSError, ValueError, TypeError):
+                self.templates = {}
+
+    @staticmethod
+    def features(landmarks):
+        points = landmark_values(landmarks)
+        wrist = points[0]
+        centered = [[value - origin for value, origin in zip(point, wrist)]
+                    for point in points]
+        scale = math.hypot(centered[9][0], centered[9][1]) or 1.0
+        return [value / scale for point in centered for value in point]
+
+    def update(self, landmarks):
+        if not self.templates:
+            return "MODEL_UNAVAILABLE", 0.0
+        try:
+            features = self.features(landmarks)
+        except (AttributeError, TypeError, ValueError, OverflowError):
+            self.history.clear()
+            return "UNKNOWN", 0.0
+        ranked = sorted(
+            (math.sqrt(sum((actual - expected) ** 2 for actual, expected in zip(features, template)) / 63), label)
+            for label, template in self.templates.items())
+        best_distance, best_label = ranked[0]
+        second_distance = ranked[1][0] if len(ranked) > 1 else float("inf")
+        if best_distance > self.MIN_DISTANCE or second_distance - best_distance < self.MIN_MARGIN:
+            self.history.clear()
+            return "UNKNOWN", 0.0
+        self.history.append(best_label)
+        stable_label = max(set(self.history), key=self.history.count)
+        confidence = math.exp(-best_distance / .35) * (self.history.count(stable_label) / len(self.history))
+        return "TEAM_SASL_" + stable_label, min(1.0, confidence)
+
+
 def landmark_values(landmarks):
     points = [[float(point.x), float(point.y), float(point.z)]
               for point in landmarks.landmark]
@@ -173,6 +221,8 @@ def main() -> None:
     parser.add_argument("--record", type=Path, help="Optional raw landmark JSONL recording")
     parser.add_argument("--model", type=Path, default=Path(__file__).resolve().parents[1] /
                         "unity/Assets/Resources/sasl_sequence_model.json")
+    parser.add_argument("--alphabet-model", type=Path, default=Path(__file__).resolve().parents[1] /
+                        "ml/team_sasl/sasl_templates.json")
     args = parser.parse_args()
 
     camera = cv2.VideoCapture(str(args.video)) if args.video else open_camera(args.camera)
@@ -189,6 +239,7 @@ def main() -> None:
     hands_api = mp.solutions.hands
     recording = args.record.open("a", encoding="utf-8") if args.record else None
     recognizer = SequenceRecognizer(args.model)
+    alphabet_recognizer = AlphabetTemplateRecognizer(args.alphabet_model)
 
     def tracking_lost():
         recognizer.reset()
@@ -230,6 +281,9 @@ def main() -> None:
                     landmarks = result.multi_hand_landmarks[primary_index]
                     handedness = labels[primary_index]
                     recognized, confidence = recognizer.update(landmarks)
+                    alphabet_label, alphabet_confidence = alphabet_recognizer.update(landmarks)
+                    if not recognized.startswith("RESEARCH_SASL_"):
+                        recognized, confidence = alphabet_label, alphabet_confidence
                     packet = packet_for(landmarks, handedness, frame.shape[1], frame.shape[0],
                                         recognized, confidence)
                     # Keep legacy primary-hand fields for Unity, while retaining

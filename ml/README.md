@@ -2,6 +2,8 @@
 
 The recognizer uses normalized 3D hand-joint vectors rather than camera pixels. This matches the joint data exposed by Quest/OpenXR and avoids storing identifiable hand images. The webcam bridge records up to two hands; the current Unity lesson displays the right hand while recordings retain both hands for future two-handed SASL lessons.
 
+The checked-in `team_sasl/` templates are the team's A–Z research baseline. They are used conservatively by the webcam bridge and are identified as `TEAM_SASL_*`; see `team_sasl/SOURCE.md` for provenance and limitations.
+
 Each JSON Lines sample must contain:
 
 ```json
