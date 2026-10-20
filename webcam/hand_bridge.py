@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 from collections import deque
 import json
 import math
@@ -235,7 +236,7 @@ def open_camera(preferred: int):
 
 
 def packet_for(hand_landmarks, handedness: str, frame_width: int, frame_height: int,
-               recognized="", confidence=0.0) -> dict:
+               recognized="", confidence=0.0, preview_jpeg="") -> dict:
     points = landmark_values(hand_landmarks)
     confidence = float(confidence)
     confidence = min(1.0, max(0.0, confidence)) if math.isfinite(confidence) else 0.0
@@ -248,6 +249,7 @@ def packet_for(hand_landmarks, handedness: str, frame_width: int, frame_height: 
         "imageHeight": frame_height,
         "recognized": recognized,
         "confidence": confidence,
+        "previewJpeg": preview_jpeg if isinstance(preview_jpeg, str) else "",
         "landmarks": [
             {"x": point[0], "y": point[1], "z": point[2]}
             for point in points
@@ -304,6 +306,7 @@ def main() -> None:
     drawing = mp.solutions.drawing_utils
     hands_api = mp.solutions.hands
     recording = args.record.open("a", encoding="utf-8") if args.record else None
+    preview_frame = 0
     recognizer = SequenceRecognizer(args.model)
     alphabet_recognizer = DenseAlphabetRecognizer(args.alphabet_weights, args.alphabet_labels)
     if alphabet_recognizer.weights is None:
@@ -354,6 +357,16 @@ def main() -> None:
                         (recognized, confidence), (alphabet_label, alphabet_confidence))
                     packet = packet_for(landmarks, handedness, frame.shape[1], frame.shape[0],
                                         recognized, confidence)
+                    # A small, local-only preview lets the learner see the real
+                    # webcam movement in the board's second card. It is not
+                    # written to recordings and stays on 127.0.0.1.
+                    preview_frame += 1
+                    if preview_frame % 3 == 0:
+                        thumbnail = cv2.resize(frame, (320, 180), interpolation=cv2.INTER_AREA)
+                        encoded, buffer = cv2.imencode(".jpg", thumbnail,
+                                                       [int(cv2.IMWRITE_JPEG_QUALITY), 45])
+                        if encoded:
+                            packet["previewJpeg"] = base64.b64encode(buffer.tobytes()).decode("ascii")
                     # Keep legacy primary-hand fields for Unity, while retaining
                     # every detected hand in recordings for two-handed SASL signs.
                     packet["hands"] = [

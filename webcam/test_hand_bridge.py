@@ -37,6 +37,11 @@ class PacketTests(unittest.TestCase):
         self.assertEqual(1.0, packet_for(example_hand(), "Right", 1280, 720, confidence=8)["confidence"])
         self.assertEqual(0.0, packet_for(example_hand(), "Right", 1280, 720, confidence=float("nan"))["confidence"])
 
+    def test_packet_preview_is_optional_and_bounded_to_text(self):
+        packet = packet_for(example_hand(), "Right", 1280, 720, preview_jpeg="abc123")
+        self.assertEqual("abc123", packet["previewJpeg"])
+        self.assertEqual("", packet_for(example_hand(), "Right", 1280, 720)["previewJpeg"])
+
     def test_packet_rejects_invalid_landmarks(self):
         hand = example_hand()
         hand.landmark[0].x = float("nan")

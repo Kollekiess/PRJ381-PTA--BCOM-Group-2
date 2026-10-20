@@ -36,6 +36,7 @@ namespace BCSignVR
         Transform progressFill;
         BoardButton nextButton;
         HandSkeletonView targetView, liveView;
+        WebcamPreviewView webcamPreview;
         InputMode inputMode = InputMode.Camera;
         Page page;
         int lessonIndex, mistakes;
@@ -94,6 +95,8 @@ namespace BCSignVR
         {
             page = next;
             if (content != null) { content.gameObject.SetActive(false); Destroy(content.gameObject); }
+            webcamPreview?.Dispose();
+            webcamPreview = null;
             content = new GameObject(next.ToString()).transform; content.SetParent(board, false);
             content.localPosition = new Vector3(0, 0, -.10f);
             targetView = null; liveView = null; feedbackText = detailsText = matchText = trackingText = demoPoseText = null;
@@ -147,6 +150,7 @@ namespace BCSignVR
             ClassroomUi.Label("BOB'S EXAMPLE", example, -1.17f, .51f, .115f, ClassroomUi.DeepBlue);
             ClassroomUi.FontLabel(letter, "NIDSASLFingerspell-Regular", example, 0, -.05f, 1.98f, ClassroomUi.Ink);
             trackingText = ClassroomUi.Label("LIVE WEBCAM  /  YOUR MOVEMENT", learner, -1.17f, .51f, .105f, ClassroomUi.Green, maxWidth: 2.55f);
+            webcamPreview = new WebcamPreviewView("Alphabet webcam preview", learner, new Vector3(0, -.16f, -.045f), new Vector2(2.56f, .88f));
             liveView = new HandSkeletonView("Alphabet learner hand", content, new Color(.22f, .65f, .55f), true);
             alphabetStatus = ClassroomUi.Label("Show Bob your hand to begin.", content, -3.05f, -1.64f, .15f,
                 ClassroomUi.Ink, maxWidth: 6.1f);
@@ -164,6 +168,7 @@ namespace BCSignVR
             var letter = ((char)('A' + alphabetIndex)).ToString();
             current.tracked = false;
             TryGetInputHand(current);
+            webcamPreview?.SetBase64(inputMode == InputMode.Camera ? webcam.PreviewJpeg : "");
             liveView.SetPose(current, content.TransformPoint(new Vector3(1.67f, -1.19f, -.20f)),
                 Quaternion.Euler(0, 180, 0), .90f);
             trackingText.text = current.tracked ? inputMode == InputMode.Demo ? "YOUR DEMO HAND" : "YOUR HAND  /  LIVE" : inputMode == InputMode.Camera && !webcam.IsReceiving ?
@@ -251,6 +256,7 @@ namespace BCSignVR
             ClassroomUi.Picture("NID greeting reference", "SASL_Greetings_NID", example,
                 new Vector3(0, -.17f, -.05f), new Vector2(1.30f, 1.04f));
             trackingText = ClassroomUi.Label("LIVE WEBCAM  /  YOUR MOVEMENT", learner, -1.17f, .52f, .095f, ClassroomUi.Green, maxWidth: 2.55f);
+            webcamPreview = new WebcamPreviewView("Greeting webcam preview", learner, new Vector3(0, -.16f, -.045f), new Vector2(2.56f, .88f));
             liveView = new HandSkeletonView("Greeting learner hand", content, new Color(.22f, .65f, .55f), true);
             alphabetStatus = ClassroomUi.Label("Show your hand and copy the greeting movement.", content,
                 -3.05f, -1.64f, .15f, ClassroomUi.Ink, maxWidth: 4.5f);
@@ -264,6 +270,7 @@ namespace BCSignVR
         {
             current.tracked = false;
             TryGetInputHand(current);
+            webcamPreview?.SetBase64(inputMode == InputMode.Camera ? webcam.PreviewJpeg : "");
             liveView.SetPose(current, content.TransformPoint(new Vector3(1.67f, -1.18f, -.20f)),
                 Quaternion.Euler(0, 180, 0), .90f);
             trackingText.text = current.tracked ? "YOUR HAND  /  LIVE" : inputMode == InputMode.Camera && !webcam.IsReceiving ?
@@ -543,7 +550,8 @@ namespace BCSignVR
             var learner = ClassroomUi.Panel("Research learner", content, new Vector3(1.67f, -.65f, 0), new Vector2(2.83f, 1.46f),
                 new Color(.95f, .98f, .97f), .16f, true).transform;
             ClassroomUi.Label("RECORDED REFERENCE", example, -1.17f, .49f, .12f, ClassroomUi.DeepBlue);
-            trackingText = ClassroomUi.Label("YOUR HAND  /  WEBCAM", learner, -1.17f, .49f, .12f, ClassroomUi.Green);
+            trackingText = ClassroomUi.Label("LIVE WEBCAM  /  YOUR MOVEMENT", learner, -1.17f, .49f, .105f, ClassroomUi.Green, maxWidth: 2.55f);
+            webcamPreview = new WebcamPreviewView("Research webcam preview", learner, new Vector3(0, -.16f, -.045f), new Vector2(2.56f, .88f));
             targetView = new HandSkeletonView("Recorded SASL hand", content, new Color(.20f, .58f, .78f), true);
             liveView = new HandSkeletonView("Research learner hand", content, new Color(.22f, .65f, .55f), true);
             feedbackText = ClassroomUi.Label("Try the movement at your pace.", content, -3.05f, -1.61f, .16f, ClassroomUi.Ink, maxWidth: 6.1f);
@@ -559,6 +567,7 @@ namespace BCSignVR
             targetView.SetPose(researchReference, content.TransformPoint(new Vector3(-1.67f, -1.15f, -.20f) + motion),
                 Quaternion.Euler(0, 180, 0), .87f);
             current.tracked = false; TryGetInputHand(current);
+            webcamPreview?.SetBase64(inputMode == InputMode.Camera ? webcam.PreviewJpeg : "");
             liveView.SetPose(current, content.TransformPoint(new Vector3(1.67f, -1.15f, -.20f)), Quaternion.Euler(0, 180, 0), .87f);
             trackingText.text = current.tracked ? inputMode == InputMode.Demo ? "YOUR DEMO HAND" : "YOUR HAND  /  LIVE" : inputMode == InputMode.Camera && !webcam.IsReceiving ? "CAMERA  /  WAITING" :
                 "YOUR HAND  /  NOT VISIBLE";
