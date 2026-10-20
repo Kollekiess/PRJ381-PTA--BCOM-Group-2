@@ -47,6 +47,9 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(200, status)
         self.assertGreaterEqual(len(lessons["lessons"]), 30)
         self.assertIn("alphabet-a", {lesson["id"] for lesson in lessons["lessons"]})
+        lesson_ids = {lesson["id"] for lesson in lessons["lessons"]}
+        self.assertIn("phrase-fingerspell-hello", lesson_ids)
+        self.assertIn("phrase-fingerspell-how-are-you", lesson_ids)
 
         status, saved = self.request("POST", "/api/sessions", {"lessonId": "prototype-open", "accuracy": 0.92, "durationSeconds": 12.4, "mistakes": 1, "completed": True, "inputSource": "webcam"}, token)
         self.assertEqual(201, status)
@@ -100,6 +103,20 @@ class ApiTests(unittest.TestCase):
             "mistakes": 1,
             "completed": True,
             "inputSource": "webcam-sasl-research",
+        }, token)
+        self.assertEqual(201, status)
+        self.assertTrue(saved["saved"])
+
+    def test_fingerspelling_phrase_attempt_can_be_synced(self):
+        token = self.register("phrase@example.org")
+        status, saved = self.request("POST", "/api/sessions", {
+            "id": "hello-fingerspell-attempt",
+            "lessonId": "phrase-fingerspell-hello",
+            "accuracy": .84,
+            "durationSeconds": 22.0,
+            "mistakes": 2,
+            "completed": True,
+            "inputSource": "webcam-sasl-fingerspelling",
         }, token)
         self.assertEqual(201, status)
         self.assertTrue(saved["saved"])
