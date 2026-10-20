@@ -293,9 +293,11 @@ namespace BCSignVR
                 tutor?.Say("Bring your whole hand into view first.", true);
                 return;
             }
+            var practiceSource = inputMode == InputMode.Camera ? "webcam-visual-practice" :
+                inputMode == InputMode.VR ? "vr-visual-practice" : "demo-visual-practice";
             history.Add(new LocalSessionRecord { lessonId = "basic-greeting", accuracy = 0,
                 durationSeconds = Mathf.Max(0, Time.time - lessonStarted), mistakes = 0, completed = true,
-                synced = false, inputSource = "reference" });
+                synced = false, inputSource = practiceSource });
             if (apiConnected) StartCoroutine(SyncPending());
             tutor?.Say("Great practice! We will add more reviewed phrases next.", true);
             ShowHome();
