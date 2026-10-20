@@ -16,11 +16,13 @@ must be reviewed by a fluent SASL signer or educator before it is labelled
   Creative Commons Attribution-NonCommercial-NoDerivatives terms; verify the
   exact asset licence before reusing any media.
 
-These links are reference-only in the app. NID states that its site content is
-owned by NID, so posters, video frames, and dictionary media must not be copied
-into this repository or redistributed without permission. The standalone app
-currently imports only the PRJ team's A–Z landmark baseline, whose provenance
-and limitations are recorded in `ml/team_sasl/SOURCE.md`.
+The included greeting card is kept as a private prototype reference with NID
+attribution; it is not a trained recognition target. NID states that its site
+content is owned by NID, so posters, video frames, and dictionary media need
+permission/licence review before this project is published or redistributed.
+The standalone app's imported model is only the PRJ team's A–Z landmark
+baseline, whose provenance and limitations are recorded in
+`ml/team_sasl/SOURCE.md`.
 
 ## What is and is not trained today
 
