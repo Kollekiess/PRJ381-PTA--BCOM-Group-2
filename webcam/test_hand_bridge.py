@@ -1,4 +1,6 @@
 import unittest
+import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -115,6 +117,18 @@ class AlphabetTemplateTests(unittest.TestCase):
     def test_dense_model_missing_weights_is_explicitly_unavailable(self):
         recognizer = DenseAlphabetRecognizer(None, None)
         self.assertEqual(("MODEL_UNAVAILABLE", 0.0), recognizer.update(example_hand()))
+
+    def test_exported_dense_model_keeps_a_template_as_a(self):
+        root = Path(__file__).resolve().parents[1]
+        templates = json.loads((root / "ml/team_sasl/sasl_templates.json").read_text())
+        recognizer = DenseAlphabetRecognizer(root / "ml/team_sasl/sasl_dense_weights.npz",
+                                             root / "ml/team_sasl/sasl_labels.json")
+        template = templates["A"]
+        hand = SimpleNamespace(landmark=[SimpleNamespace(x=template[i], y=template[i + 1], z=template[i + 2])
+                                          for i in range(0, 63, 3)])
+        result = [recognizer.update(hand) for _ in range(7)][-1]
+        self.assertEqual("TEAM_SASL_A", result[0])
+        self.assertGreater(result[1], .60)
 
 
 class CameraReadTests(unittest.TestCase):
