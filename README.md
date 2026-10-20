@@ -57,6 +57,13 @@ To diagnose the camera without opening Unity, run:
 .venv/bin/python -c 'import cv2; c=cv2.VideoCapture(0); ok,f=c.read(); print({"camera_open":c.isOpened(),"frame_received":ok,"size":None if f is None else [f.shape[1],f.shape[0]]}); c.release()'
 ```
 
+For a single read-only check of the running API, built app, database schema,
+seeded lesson path, and camera frame, run:
+
+```bash
+.venv/bin/python scripts/smoke_test_local.py
+```
+
 The classroom launcher keeps retrying the MediaPipe bridge if the camera temporarily stops delivering frames. In the lesson, `CAMERA / WAITING` means the bridge has not sent a packet yet; `YOUR HAND / NOT VISIBLE` means the camera is connected but no hand is currently detected.
 
 ## Run as a simulated Meta Quest 3
