@@ -22,4 +22,6 @@ fi
 "$UNITY" -batchmode -projectPath unity -runTests -testPlatform editmode \
   -testResults "$RESULTS" -logFile "${RESULTS%.xml}.log"
 grep -q 'result="Passed"' "$RESULTS"
+print "[5/5] Rendered classroom UI smoke"
+./scripts/render_ui_smoke.sh
 print "All BCSignVR test suites passed. Results: $RESULTS"
