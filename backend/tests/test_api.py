@@ -124,6 +124,23 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(201, status)
         self.assertTrue(saved["saved"])
 
+    def test_research_lesson_attempt_can_be_synced(self):
+        token = self.register("research@example.org")
+        status, saved = self.request("POST", "/api/sessions", {
+            "id": "cape-town-research-attempt",
+            "lessonId": "research-sasl-cape-town",
+            "accuracy": 0,
+            "durationSeconds": 18.5,
+            "mistakes": 0,
+            "completed": True,
+            "inputSource": "webcam-research-visual-practice",
+        }, token)
+        self.assertEqual(201, status)
+        self.assertTrue(saved["saved"])
+        status, progress = self.request("GET", "/api/progress", token=token)
+        self.assertEqual(200, status)
+        self.assertEqual("research-sasl-cape-town", progress["sessions"][0]["lesson_id"])
+
     def test_invalid_session_ids_nonfinite_metrics_and_nonobject_json_are_rejected(self):
         token = self.register("validation@example.org")
         attempt = {"lessonId": "prototype-open", "accuracy": .8, "durationSeconds": 12}
