@@ -171,7 +171,7 @@ namespace BCSignVR
             webcamPreview?.SetBase64(inputMode == InputMode.Camera ? webcam.PreviewJpeg : "");
             liveView.SetPose(current, content.TransformPoint(new Vector3(1.67f, -1.19f, -.20f)),
                 Quaternion.Euler(0, 180, 0), .90f);
-            trackingText.text = current.tracked ? inputMode == InputMode.Demo ? "YOUR DEMO HAND" : "YOUR HAND  /  LIVE" : inputMode == InputMode.Camera && !webcam.IsReceiving ?
+            trackingText.text = current.tracked ? inputMode == InputMode.Demo ? "YOUR DEMO HAND" : inputMode == InputMode.Camera ? "LIVE WEBCAM  /  YOUR MOVEMENT" : "YOUR VR HAND  /  LIVE" : inputMode == InputMode.Camera && !webcam.IsReceiving ?
                 "CAMERA  /  WAITING" : "YOUR HAND  /  NOT VISIBLE";
             var expected = "TEAM_SASL_" + letter;
             var recognized = inputMode == InputMode.Camera ? webcam.RecognizedLabel : "";
@@ -273,7 +273,7 @@ namespace BCSignVR
             webcamPreview?.SetBase64(inputMode == InputMode.Camera ? webcam.PreviewJpeg : "");
             liveView.SetPose(current, content.TransformPoint(new Vector3(1.67f, -1.18f, -.20f)),
                 Quaternion.Euler(0, 180, 0), .90f);
-            trackingText.text = current.tracked ? "YOUR HAND  /  LIVE" : inputMode == InputMode.Camera && !webcam.IsReceiving ?
+            trackingText.text = current.tracked ? inputMode == InputMode.Demo ? "YOUR DEMO HAND" : inputMode == InputMode.Camera ? "LIVE WEBCAM  /  YOUR MOVEMENT" : "YOUR VR HAND  /  LIVE" : inputMode == InputMode.Camera && !webcam.IsReceiving ?
                 "CAMERA  /  WAITING" : "YOUR HAND  /  NOT VISIBLE";
             alphabetStatus.text = current.tracked ? "Hand visible. Copy the movement slowly and clearly."
                 : inputMode == InputMode.Camera && !webcam.IsReceiving ? "Camera is not sending frames yet. Allow Camera access." :
@@ -402,7 +402,7 @@ namespace BCSignVR
                     matchText.text = $"{match:P0} match";
                 }
             }
-            trackingText.text = current.tracked ? inputMode == InputMode.Demo ? "YOUR DEMO HAND" : "YOUR HAND  /  LIVE" :
+            trackingText.text = current.tracked ? inputMode == InputMode.Demo ? "YOUR DEMO HAND" : inputMode == InputMode.Camera ? "LIVE WEBCAM  /  YOUR MOVEMENT" : "YOUR VR HAND  /  LIVE" :
                 inputMode == InputMode.Camera && !webcam.IsReceiving ? "CAMERA  /  WAITING" : "YOUR HAND  /  NOT VISIBLE";
             if (demoPoseText != null) demoPoseText.text = "Demo pose: " + simulated.CurrentPose.ToString().ToLowerInvariant();
             if (progressFill != null)
@@ -569,7 +569,7 @@ namespace BCSignVR
             current.tracked = false; TryGetInputHand(current);
             webcamPreview?.SetBase64(inputMode == InputMode.Camera ? webcam.PreviewJpeg : "");
             liveView.SetPose(current, content.TransformPoint(new Vector3(1.67f, -1.15f, -.20f)), Quaternion.Euler(0, 180, 0), .87f);
-            trackingText.text = current.tracked ? inputMode == InputMode.Demo ? "YOUR DEMO HAND" : "YOUR HAND  /  LIVE" : inputMode == InputMode.Camera && !webcam.IsReceiving ? "CAMERA  /  WAITING" :
+            trackingText.text = current.tracked ? inputMode == InputMode.Demo ? "YOUR DEMO HAND" : inputMode == InputMode.Camera ? "LIVE WEBCAM  /  YOUR MOVEMENT" : "YOUR VR HAND  /  LIVE" : inputMode == InputMode.Camera && !webcam.IsReceiving ? "CAMERA  /  WAITING" :
                 "YOUR HAND  /  NOT VISIBLE";
             feedbackText.text = !current.tracked ? "Show your full hand to the webcam to try the movement." :
                 inputMode == InputMode.Camera && webcam.RecognizedLabel == references.Label(researchIndex) ? $"Similar movement detected  /  similarity {webcam.RecognitionConfidence:P0}" :
