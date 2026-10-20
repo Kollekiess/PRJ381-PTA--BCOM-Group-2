@@ -267,6 +267,18 @@ def select_primary_hand(hand_landmarks, handedness):
     return 0
 
 
+def packet_hands(hand_landmarks, handedness):
+    """Serialize every detected hand while keeping MediaPipe objects out of JSON."""
+    if len(hand_landmarks) != len(handedness):
+        raise ValueError("Hand and handedness counts must match")
+    return [
+        {"handedness": str(label),
+         "landmarks": [{"x": point[0], "y": point[1], "z": point[2]}
+                       for point in landmark_values(item)]}
+        for item, label in zip(hand_landmarks, handedness)
+    ]
+
+
 def choose_recognition(sequence_result, alphabet_result):
     """Keep reviewed/recorded sequence labels ahead of static A–Z fallback."""
     sequence_label, sequence_confidence = sequence_result
@@ -371,12 +383,7 @@ def main() -> None:
                             packet["previewJpeg"] = base64.b64encode(buffer.tobytes()).decode("ascii")
                     # Keep legacy primary-hand fields for Unity, while retaining
                     # every detected hand in recordings for two-handed SASL signs.
-                    packet["hands"] = [
-                        {"handedness": label,
-                         "landmarks": [{"x": point[0], "y": point[1], "z": point[2]}
-                                       for point in landmark_values(item)]}
-                        for item, label in zip(result.multi_hand_landmarks, labels)
-                    ]
+                    packet["hands"] = packet_hands(result.multi_hand_landmarks, labels)
                     payload = json.dumps(packet, separators=(",", ":"))
                     sender.sendto(payload.encode("utf-8"), (args.host, args.port))
                     if recording:
