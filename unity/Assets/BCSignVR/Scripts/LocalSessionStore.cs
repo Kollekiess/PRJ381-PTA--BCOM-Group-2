@@ -19,9 +19,11 @@ namespace BCSignVR
         public bool synced;
         public string inputSource;
 
-        public bool IsDemo => string.Equals(inputSource, "demo", StringComparison.OrdinalIgnoreCase);
+        public bool IsDemo => string.Equals(inputSource, "demo", StringComparison.OrdinalIgnoreCase) ||
+            inputSource.StartsWith("demo-", StringComparison.OrdinalIgnoreCase);
         public bool IsReference => string.Equals(inputSource, "reference", StringComparison.OrdinalIgnoreCase);
-        public bool IsScored => !IsDemo && !IsReference;
+        public bool IsVisualPractice => inputSource.EndsWith("-visual-practice", StringComparison.OrdinalIgnoreCase);
+        public bool IsScored => !IsDemo && !IsReference && !IsVisualPractice;
         public bool IsSyncable => !IsDemo;
 
         internal LocalSessionRecord Copy() => (LocalSessionRecord)MemberwiseClone();

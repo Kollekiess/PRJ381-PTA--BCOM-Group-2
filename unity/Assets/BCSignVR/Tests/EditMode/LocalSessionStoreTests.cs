@@ -52,6 +52,18 @@ namespace BCSignVR.Tests
         }
 
         [Test]
+        public void VisualPracticeIsSavedWithoutInflatingAccuracy()
+        {
+            var store = new LocalSessionStore(path);
+            store.Add(Attempt("webcam-visual-practice", 0f));
+            store.Add(Attempt("webcam", .88f));
+            Assert.AreEqual(2, store.Count);
+            Assert.AreEqual(1, store.TotalCompleted);
+            Assert.AreEqual(.88f, store.BestAccuracy);
+            Assert.AreEqual(2, store.PendingCount);
+        }
+
+        [Test]
         public void ReferencePracticeIsQueuedForAccountHistory()
         {
             var store = new LocalSessionStore(path);
