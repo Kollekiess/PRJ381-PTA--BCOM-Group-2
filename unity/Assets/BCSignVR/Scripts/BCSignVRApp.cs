@@ -631,8 +631,10 @@ namespace BCSignVR
             Metric("ACCOUNT COMPLETED", remoteProgressLoaded ? remoteCompleted.ToString() : history.TotalCompleted.ToString(), -2.05f);
             Metric("ACCOUNT AVERAGE", remoteProgressLoaded ? remoteAverage.ToString("P0") : history.TotalCompleted == 0 ? "--" : history.BestAccuracy.ToString("P0"), 0);
             Metric("ALPHABET", history.AlphabetPractisedCount + " / 26", 2.05f);
+            ClassroomUi.Label($"Research collection: {history.ResearchPractisedCount} / 3 practised", content,
+                0, -1.27f, .13f, ClassroomUi.Muted, TextAnchor.MiddleCenter, 5.8f);
             ClassroomUi.Label(history.PendingCount > 0 ? $"{history.PendingCount} results waiting to sync. Your local copy is saved." :
-                "Ready when you are. A little practice adds up.", content, 0, -1.35f, .15f, ClassroomUi.Muted, TextAnchor.MiddleCenter, 6f);
+                "Ready when you are. A little practice adds up.", content, 0, -1.54f, .15f, ClassroomUi.Muted, TextAnchor.MiddleCenter, 6f);
             ClassroomUi.Button("Start a warm-up", content, 0, -1.93f, 2.55f, StartWarmup, true);
             if (apiConnected) StartCoroutine(RefreshRemoteProgress());
         }

@@ -47,6 +47,8 @@ namespace BCSignVR
         public int AlphabetPractisedCount => records.Where(record => record.completed && record.IsReference &&
             record.lessonId.StartsWith("alphabet-", StringComparison.OrdinalIgnoreCase))
             .Select(record => record.lessonId).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+        public int ResearchPractisedCount => records.Where(record => record.completed && record.lessonId.StartsWith("research-sasl-", StringComparison.OrdinalIgnoreCase))
+            .Select(record => record.lessonId).Distinct(StringComparer.OrdinalIgnoreCase).Count();
         public int PendingCount => records.Count(record => !record.synced && record.IsSyncable);
         public float BestAccuracy => records.Where(record => record.completed && record.IsScored)
             .Select(record => record.accuracy).DefaultIfEmpty(0f).Max();

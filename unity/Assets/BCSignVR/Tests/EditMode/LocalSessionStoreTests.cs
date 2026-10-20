@@ -73,6 +73,29 @@ namespace BCSignVR.Tests
         }
 
         [Test]
+        public void ResearchPracticeAppearsInItsOwnProgressCount()
+        {
+            var store = new LocalSessionStore(path);
+            store.Add(new LocalSessionRecord
+            {
+                lessonId = "research-sasl-cape-town",
+                accuracy = 0f,
+                durationSeconds = 8f,
+                completed = true,
+                inputSource = "webcam-research-visual-practice"
+            });
+            store.Add(new LocalSessionRecord
+            {
+                lessonId = "research-sasl-cape-town",
+                accuracy = 0f,
+                durationSeconds = 9f,
+                completed = true,
+                inputSource = "webcam-research-visual-practice"
+            });
+            Assert.AreEqual(1, store.ResearchPractisedCount);
+        }
+
+        [Test]
         public void CorruptHistoryIsPreservedBeforeNewHistoryReplacesIt()
         {
             Directory.CreateDirectory(directory);
