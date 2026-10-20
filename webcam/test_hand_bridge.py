@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from hand_bridge import packet_for, read_camera_frame, SequenceRecognizer
+from hand_bridge import packet_for, read_camera_frame, select_primary_hand, SequenceRecognizer
 
 
 def example_hand():
@@ -31,6 +31,12 @@ class PacketTests(unittest.TestCase):
         hand.landmark[0].x = float("nan")
         with self.assertRaises(ValueError):
             packet_for(hand, "Right", 1280, 720)
+
+    def test_primary_hand_prefers_right_hand(self):
+        self.assertEqual(1, select_primary_hand([object(), object()], ["Left", "Right"]))
+
+    def test_primary_hand_falls_back_deterministically(self):
+        self.assertEqual(0, select_primary_hand([object(), object()], ["Left", "Left"]))
 
 
 class RecognizerTests(unittest.TestCase):

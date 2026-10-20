@@ -153,6 +153,16 @@ def packet_for(hand_landmarks, handedness: str, frame_width: int, frame_height: 
     }
 
 
+def select_primary_hand(hand_landmarks, handedness):
+    """Prefer the right hand while retaining a deterministic fallback."""
+    if not hand_landmarks:
+        raise ValueError("At least one hand is required")
+    for index, label in enumerate(handedness):
+        if str(label).lower() == "right":
+            return index
+    return 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--camera", type=int, default=0)
@@ -188,7 +198,7 @@ def main() -> None:
     try:
         with hands_api.Hands(
             static_image_mode=False,
-            max_num_hands=1,
+            max_num_hands=2,
             model_complexity=1,
             min_detection_confidence=0.55,
             min_tracking_confidence=0.55,
@@ -215,11 +225,21 @@ def main() -> None:
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 result = hands.process(rgb)
                 if result.multi_hand_landmarks:
-                    landmarks = result.multi_hand_landmarks[0]
-                    handedness = result.multi_handedness[0].classification[0].label
+                    labels = [item.classification[0].label for item in result.multi_handedness]
+                    primary_index = select_primary_hand(result.multi_hand_landmarks, labels)
+                    landmarks = result.multi_hand_landmarks[primary_index]
+                    handedness = labels[primary_index]
                     recognized, confidence = recognizer.update(landmarks)
                     packet = packet_for(landmarks, handedness, frame.shape[1], frame.shape[0],
                                         recognized, confidence)
+                    # Keep legacy primary-hand fields for Unity, while retaining
+                    # every detected hand in recordings for two-handed SASL signs.
+                    packet["hands"] = [
+                        {"handedness": label,
+                         "landmarks": [{"x": point.x, "y": point.y, "z": point.z}
+                                       for point in landmark_values(item)]}
+                        for item, label in zip(result.multi_hand_landmarks, labels)
+                    ]
                     payload = json.dumps(packet, separators=(",", ":"))
                     sender.sendto(payload.encode("utf-8"), (args.host, args.port))
                     if recording:

@@ -1,6 +1,6 @@
 # SASL gesture dataset and training
 
-The recognizer uses normalized 3D hand-joint vectors rather than camera pixels. This matches the joint data exposed by Quest/OpenXR and avoids storing identifiable hand images.
+The recognizer uses normalized 3D hand-joint vectors rather than camera pixels. This matches the joint data exposed by Quest/OpenXR and avoids storing identifiable hand images. The webcam bridge records up to two hands; the current Unity lesson displays the right hand while recordings retain both hands for future two-handed SASL lessons.
 
 Each JSON Lines sample must contain:
 
