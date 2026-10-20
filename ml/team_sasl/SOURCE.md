@@ -12,3 +12,10 @@ landmark templates as a conservative fallback because the Mac webcam
 environment does not ship TensorFlow. Predictions are labelled `TEAM_SASL_*`
 and are feedback, not a certified proficiency result. The scene, UI, Bob
 avatar and lesson flow remain this standalone project's own work.
+
+Before importing it, I audited the repository data: the CSV has 2,146 rows and
+all 26 A–Z labels, but the accompanying session record contains only one
+session and the rows do not identify signers or a qualified SASL reviewer. The
+reported holdout is therefore useful engineering evidence, not community or
+signer-held-out validation. The app keeps the model behind a conservative
+distance/margin gate and never records its prediction as certified accuracy.
