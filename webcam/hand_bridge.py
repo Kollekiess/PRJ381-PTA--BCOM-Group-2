@@ -362,10 +362,12 @@ def main() -> None:
                     # written to recordings and stays on 127.0.0.1.
                     preview_frame += 1
                     if preview_frame % 3 == 0:
-                        thumbnail = cv2.resize(frame, (320, 180), interpolation=cv2.INTER_AREA)
+                        thumbnail = cv2.resize(frame, (160, 90), interpolation=cv2.INTER_AREA)
                         encoded, buffer = cv2.imencode(".jpg", thumbnail,
-                                                       [int(cv2.IMWRITE_JPEG_QUALITY), 45])
-                        if encoded:
+                                                       [int(cv2.IMWRITE_JPEG_QUALITY), 35])
+                        # Keep the complete UDP datagram below macOS's safe
+                        # payload size even on a detailed classroom background.
+                        if encoded and len(buffer) <= 6000:
                             packet["previewJpeg"] = base64.b64encode(buffer.tobytes()).decode("ascii")
                     # Keep legacy primary-hand fields for Unity, while retaining
                     # every detected hand in recordings for two-handed SASL signs.
