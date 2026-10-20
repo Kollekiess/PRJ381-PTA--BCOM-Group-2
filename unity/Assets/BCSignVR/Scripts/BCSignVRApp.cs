@@ -827,6 +827,7 @@ namespace BCSignVR
             else if (scenario == "input") CycleMode();
             else if (scenario == "alphabet") ShowAlphabet(0);
             else if (scenario == "greeting") ShowGreeting();
+            else if (scenario == "fingerspell") ShowFingerspell("HELLO");
             else if (scenario == "results")
             { inputMode = InputMode.Demo; sessionScores.AddRange(new[] { .96f, .93f, .98f }); saveStatus = "Demo preview"; ShowResults(); }
             yield return new WaitForSeconds(1.4f); yield return new WaitForEndOfFrame();
