@@ -407,9 +407,13 @@ namespace BCSignVR
                 Quaternion.Euler(0, 180, 0), .90f);
             trackingText.text = current.tracked ? inputMode == InputMode.Demo ? "YOUR DEMO HAND" : inputMode == InputMode.Camera ? "LIVE WEBCAM  /  YOUR MOVEMENT" : "YOUR VR HAND  /  LIVE" : inputMode == InputMode.Camera && !webcam.IsReceiving ?
                 "CAMERA  /  WAITING" : "YOUR HAND  /  NOT VISIBLE";
-            alphabetStatus.text = current.tracked ? "Hand visible. Copy the movement slowly and clearly."
+            var reviewedGreeting = inputMode == InputMode.Camera && current.tracked &&
+                webcam.RecognizedLabel == "REVIEWED_SASL_HELLO" && webcam.RecognitionConfidence >= .60f;
+            alphabetStatus.text = reviewedGreeting ? $"Bob recognises the reviewed SASL greeting  /  {webcam.RecognitionConfidence:P0}. You can save a scored attempt."
+                : current.tracked ? "Hand visible. Copy the movement slowly and clearly."
                 : inputMode == InputMode.Camera && !webcam.IsReceiving ? "Camera is not sending frames yet. Allow Camera access." :
                 "Show your full hand to the webcam.";
+            if (reviewedGreeting) tutor?.Say("That matches the reviewed SASL greeting. Nice work!", true);
         }
 
         void RecordGreeting()
@@ -420,9 +424,10 @@ namespace BCSignVR
                 tutor?.Say("Bring your whole hand into view first.", true);
                 return;
             }
-            var practiceSource = inputMode == InputMode.Camera ? "webcam-visual-practice" :
+            var reviewed = inputMode == InputMode.Camera && webcam.RecognizedLabel == "REVIEWED_SASL_HELLO" && webcam.RecognitionConfidence >= .60f;
+            var practiceSource = reviewed ? "webcam-sasl-reviewed" : inputMode == InputMode.Camera ? "webcam-visual-practice" :
                 inputMode == InputMode.VR ? "vr-visual-practice" : "demo-visual-practice";
-            history.Add(new LocalSessionRecord { lessonId = "basic-greeting", accuracy = 0,
+            history.Add(new LocalSessionRecord { lessonId = "basic-greeting", accuracy = reviewed ? webcam.RecognitionConfidence : 0,
                 durationSeconds = Mathf.Max(0, Time.time - lessonStarted), mistakes = 0, completed = true,
                 synced = false, inputSource = practiceSource });
             if (apiConnected) StartCoroutine(SyncPending());
