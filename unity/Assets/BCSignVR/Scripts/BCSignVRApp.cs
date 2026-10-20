@@ -46,6 +46,7 @@ namespace BCSignVR
         bool preview;
         TutorAvatar tutor;
         int alphabetIndex;
+        int alphabetMistakes;
         TextMesh alphabetStatus;
 
         void Awake()
@@ -130,6 +131,7 @@ namespace BCSignVR
         void ShowAlphabet(int index)
         {
             alphabetIndex = Mathf.Clamp(index, 0, 25);
+            alphabetMistakes = 0;
             lessonStarted = Time.time;
             BeginPage(Page.Alphabet);
             var letter = ((char)('A' + alphabetIndex)).ToString();
@@ -188,12 +190,21 @@ namespace BCSignVR
                 return;
             }
             var letter = ((char)('A' + alphabetIndex)).ToString();
+            var expected = "TEAM_SASL_" + letter;
+            if (inputMode == InputMode.Camera && current.tracked && webcam.RecognizedLabel.StartsWith("TEAM_SASL_") &&
+                webcam.RecognizedLabel != expected && webcam.RecognitionConfidence >= .60f)
+            {
+                alphabetMistakes++;
+                alphabetStatus.text = $"Not quite {letter}. Bob sees {webcam.RecognizedLabel.Replace("TEAM_SASL_", "")}; adjust your hand and try again.";
+                tutor?.Say($"That looks closer to {webcam.RecognizedLabel.Replace("TEAM_SASL_", "")}. Match the {letter} example on the board.", true);
+                return;
+            }
             var accuracy = inputMode == InputMode.Camera && webcam.RecognizedLabel == "TEAM_SASL_" + letter
                 ? webcam.RecognitionConfidence : 0f;
             try
             {
                 history.Add(new LocalSessionRecord { lessonId = "alphabet-" + letter.ToLowerInvariant(), accuracy = accuracy,
-                    durationSeconds = Mathf.Max(0, Time.time - lessonStarted), mistakes = 0, completed = true,
+                    durationSeconds = Mathf.Max(0, Time.time - lessonStarted), mistakes = alphabetMistakes, completed = true,
                     synced = true, inputSource = accuracy > 0 ? "webcam-sasl-research" : "reference" });
                 saveStatus = "Alphabet practice saved on this Mac";
             }
