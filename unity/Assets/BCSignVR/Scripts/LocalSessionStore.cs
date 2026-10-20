@@ -22,7 +22,8 @@ namespace BCSignVR
         public bool IsDemo => string.Equals(inputSource, "demo", StringComparison.OrdinalIgnoreCase) ||
             inputSource.StartsWith("demo-", StringComparison.OrdinalIgnoreCase);
         public bool IsReference => string.Equals(inputSource, "reference", StringComparison.OrdinalIgnoreCase);
-        public bool IsVisualPractice => inputSource.EndsWith("-visual-practice", StringComparison.OrdinalIgnoreCase);
+        public bool IsVisualPractice => !string.IsNullOrEmpty(inputSource) &&
+            inputSource.EndsWith("-visual-practice", StringComparison.OrdinalIgnoreCase);
         public bool IsScored => !IsDemo && !IsReference && !IsVisualPractice;
         public bool IsSyncable => !IsDemo;
 
