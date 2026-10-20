@@ -84,6 +84,9 @@ Run `./scripts/run_all_tests.sh` before pushing changes. It runs the backend,
 webcam, ML and Unity EditMode suites and writes the Unity XML result to your
 temporary directory.
 
+Run `./scripts/render_ui_smoke.sh` to render the key classroom pages and catch
+broken layout or missing controls before sharing a build.
+
 In Meta XR Simulator choose the Quest 3 device profile and use its input panel to drive both hands. Select **VR hands** on the classroom input screen. There is no automatic fallback to demo when real tracking disappears.
 
 The installed Meta XR Simulator `201.0` supports keyboard/mouse simulated hands. The app's MediaPipe bridge provides webcam hands independently of that version. Meta's own built-in webcam camera tracking requires Meta XR Simulator `207` or newer.
