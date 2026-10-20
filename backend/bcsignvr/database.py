@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     duration_seconds REAL NOT NULL CHECK(duration_seconds >= 0),
     mistakes INTEGER NOT NULL DEFAULT 0 CHECK(mistakes >= 0),
     completed INTEGER NOT NULL DEFAULT 1 CHECK(completed IN (0,1)),
+    input_source TEXT NOT NULL DEFAULT 'unknown',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_user_created ON sessions(user_id, created_at DESC);
@@ -116,6 +117,8 @@ class Database:
             columns = {row["name"] for row in connection.execute("PRAGMA table_info(sessions)")}
             if "client_id" not in columns:
                 connection.execute("ALTER TABLE sessions ADD COLUMN client_id TEXT")
+            if "input_source" not in columns:
+                connection.execute("ALTER TABLE sessions ADD COLUMN input_source TEXT NOT NULL DEFAULT 'unknown'")
             # NULL preserves the existing API for clients that do not send an id.
             connection.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_user_client ON sessions(user_id, client_id)"
@@ -140,15 +143,16 @@ class Database:
             cursor = connection.execute(sql, parameters)
             return cursor.lastrowid
 
-    def save_session(self, user_id, client_id, lesson_id, accuracy, duration, mistakes, completed):
+    def save_session(self, user_id, client_id, lesson_id, accuracy, duration, mistakes, completed,
+                     input_source="unknown"):
         """Return (server id, newly created), including safe concurrent upload retries."""
         with self.connect() as connection:
             try:
                 cursor = connection.execute(
                     """INSERT INTO sessions
-                       (user_id,client_id,lesson_id,accuracy,duration_seconds,mistakes,completed)
-                       VALUES (?,?,?,?,?,?,?)""",
-                    (user_id, client_id, lesson_id, accuracy, duration, mistakes, completed),
+                       (user_id,client_id,lesson_id,accuracy,duration_seconds,mistakes,completed,input_source)
+                       VALUES (?,?,?,?,?,?,?,?)""",
+                    (user_id, client_id, lesson_id, accuracy, duration, mistakes, completed, input_source),
                 )
                 return cursor.lastrowid, True
             except sqlite3.IntegrityError:

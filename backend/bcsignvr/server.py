@@ -45,7 +45,7 @@ class Handler(BaseHTTPRequestHandler):
             if not user:
                 return
             rows = self.app.database.all(
-                """SELECT s.id,s.client_id,s.lesson_id,l.title,s.accuracy,s.duration_seconds,s.mistakes,s.completed,s.created_at
+                """SELECT s.id,s.client_id,s.lesson_id,l.title,s.accuracy,s.duration_seconds,s.mistakes,s.completed,s.input_source,s.created_at
                    FROM sessions s JOIN lessons l ON l.id=s.lesson_id
                    WHERE s.user_id=? ORDER BY s.created_at DESC LIMIT 50""",
                 (user["sub"],),
@@ -110,8 +110,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(400, {"error": "Invalid session metrics"})
             if not math.isfinite(accuracy) or not math.isfinite(duration) or not 0 <= accuracy <= 1 or duration < 0 or mistakes < 0:
                 return self._send(400, {"error": "Session metrics are outside allowed ranges"})
+            input_source = str(body.get("inputSource", "unknown")).strip()
+            if not input_source or len(input_source) > 40:
+                return self._send(400, {"error": "inputSource must be a non-empty short label"})
             session_id, created = self.app.database.save_session(
-                user["sub"], client_id, lesson_id, accuracy, duration, mistakes, int(bool(body.get("completed", True)))
+                user["sub"], client_id, lesson_id, accuracy, duration, mistakes,
+                int(bool(body.get("completed", True))), input_source
             )
             return self._send(201 if created else 200, {"id": session_id, "saved": True, "replayed": not created})
         return self._send(404, {"error": "Route not found"})

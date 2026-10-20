@@ -48,7 +48,7 @@ class ApiTests(unittest.TestCase):
         self.assertGreaterEqual(len(lessons["lessons"]), 30)
         self.assertIn("alphabet-a", {lesson["id"] for lesson in lessons["lessons"]})
 
-        status, saved = self.request("POST", "/api/sessions", {"lessonId": "prototype-open", "accuracy": 0.92, "durationSeconds": 12.4, "mistakes": 1, "completed": True}, token)
+        status, saved = self.request("POST", "/api/sessions", {"lessonId": "prototype-open", "accuracy": 0.92, "durationSeconds": 12.4, "mistakes": 1, "completed": True, "inputSource": "webcam"}, token)
         self.assertEqual(201, status)
         self.assertTrue(saved["saved"])
 
@@ -56,6 +56,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(200, status)
         self.assertEqual(1, progress["summary"]["completed"])
         self.assertAlmostEqual(0.92, progress["summary"]["averageAccuracy"])
+        self.assertEqual("webcam", progress["sessions"][0]["input_source"])
 
     def test_rejects_short_password_and_unauthenticated_progress(self):
         status, _ = self.request("POST", "/api/auth/register", {"name": "A", "email": "a@example.org", "password": "short"})
@@ -98,6 +99,7 @@ class ApiTests(unittest.TestCase):
             "durationSeconds": 6.0,
             "mistakes": 1,
             "completed": True,
+            "inputSource": "webcam-sasl-research",
         }, token)
         self.assertEqual(201, status)
         self.assertTrue(saved["saved"])
@@ -128,7 +130,7 @@ class DatabaseMigrationTests(unittest.TestCase):
             path = Path(directory) / "old.sqlite3"
             database = Database(path)
             user_id = database.execute("INSERT INTO users(name,email,password_hash) VALUES (?,?,?)", ("Legacy", "legacy@example.org", "unused"))
-            database.save_session(user_id, None, "prototype-open", .7, 8, 0, 1)
+            database.save_session(user_id, None, "prototype-open", .7, 8, 0, 1, "webcam")
             # Recreate the old sessions schema with its original row, without client_id.
             with sqlite3.connect(path) as connection:
                 connection.executescript("""
@@ -137,6 +139,7 @@ class DatabaseMigrationTests(unittest.TestCase):
                 """)
             migrated = Database(path)
             self.assertEqual(1, len(migrated.all("SELECT * FROM sessions")))
+            self.assertEqual("webcam", migrated.one("SELECT input_source FROM sessions")["input_source"])
             saved_id, created = migrated.save_session(user_id, "new-offline-id", "prototype-open", .9, 9, 0, 1)
             self.assertTrue(created)
             retry_id, created = migrated.save_session(user_id, "new-offline-id", "prototype-open", .9, 9, 0, 1)
