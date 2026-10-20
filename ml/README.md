@@ -12,7 +12,7 @@ Each JSON Lines sample must contain:
 
 `joints` must contain the same ordered joints used by Unity's `HandPoseFrame`: wrist, palm, and each finger's metacarpal/proximal/intermediate/distal/tip joints. Capture multiple signers, dominant hands, hand sizes, and comfortable pose variations. Keep signer identities outside the repository.
 
-Run `python3 train_pose_model.py samples.jsonl model.json` to create a nearest-centroid model. The trainer rejects unreviewed samples and labels that are not explicitly prefixed `REVIEWED_SASL_`.
+Run `python3 train_pose_model.py samples.jsonl model.json` to create a nearest-centroid model. The trainer rejects unreviewed samples and labels that are not explicitly prefixed `REVIEWED_SASL_`. Its output uses the bridge's `centroidSequence` format (a held 32-frame pose), so the generated JSON can be passed directly as the bridge's `--model` input.
 
 To create reviewed rows from a consented webcam recording, first capture landmarks without images:
 

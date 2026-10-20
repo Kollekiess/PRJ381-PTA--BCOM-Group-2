@@ -42,7 +42,12 @@ def train(input_path: Path, output_path: Path):
     for label, rows in sorted(grouped.items()):
         centroid = [statistics.fmean(column) for column in zip(*rows)]
         distances = [math.sqrt(statistics.fmean((a - b) ** 2 for a, b in zip(row, centroid))) for row in rows]
-        model["classes"].append({"label": label, "sampleCount": len(rows), "centroid": centroid, "acceptanceDistance": max(0.05, statistics.fmean(distances) * 2.5 if distances else 0.05)})
+        # SequenceRecognizer consumes 32-frame prototypes. A reviewed static
+        # handshape is deliberately represented as a held pose, rather than
+        # silently inventing movement between captured frames.
+        model["classes"].append({"label": label, "sampleCount": len(rows),
+                                  "centroidSequence": [centroid] * 32,
+                                  "acceptanceDistance": max(0.05, statistics.fmean(distances) * 2.5 if distances else 0.05)})
     output_path.write_text(json.dumps(model, indent=2) + "\n")
 
 
