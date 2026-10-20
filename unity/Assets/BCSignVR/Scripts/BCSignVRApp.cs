@@ -146,7 +146,7 @@ namespace BCSignVR
                 new Vector2(2.83f, 1.52f), new Color(.95f, .98f, .97f), .16f, true).transform;
             ClassroomUi.Label("BOB'S EXAMPLE", example, -1.17f, .51f, .115f, ClassroomUi.DeepBlue);
             ClassroomUi.FontLabel(letter, "NIDSASLFingerspell-Regular", example, 0, -.05f, 1.98f, ClassroomUi.Ink);
-            trackingText = ClassroomUi.Label("YOUR HAND", learner, -1.17f, .51f, .115f, ClassroomUi.Green);
+            trackingText = ClassroomUi.Label("LIVE WEBCAM  /  YOUR MOVEMENT", learner, -1.17f, .51f, .105f, ClassroomUi.Green, maxWidth: 2.55f);
             liveView = new HandSkeletonView("Alphabet learner hand", content, new Color(.22f, .65f, .55f), true);
             alphabetStatus = ClassroomUi.Label("Show Bob your hand to begin.", content, -3.05f, -1.64f, .15f,
                 ClassroomUi.Ink, maxWidth: 6.1f);
@@ -194,8 +194,10 @@ namespace BCSignVR
                 webcam.RecognizedLabel != expected && webcam.RecognitionConfidence >= .60f)
             {
                 alphabetMistakes++;
-                alphabetStatus.text = $"Not quite {letter}. Bob sees {webcam.RecognizedLabel.Replace("TEAM_SASL_", "")}; adjust your hand and try again.";
-                tutor?.Say($"That looks closer to {webcam.RecognizedLabel.Replace("TEAM_SASL_", "")}. Match the {letter} example on the board.", true);
+                var observed = webcam.RecognizedLabel.Replace("TEAM_SASL_", "");
+                var tip = AlphabetTip(letter, observed);
+                alphabetStatus.text = $"Not quite {letter}. Bob sees {observed}. {tip}";
+                tutor?.Say(tip, true);
                 return;
             }
             var accuracy = inputMode == InputMode.Camera && webcam.RecognizedLabel == "TEAM_SASL_" + letter
@@ -207,11 +209,29 @@ namespace BCSignVR
                     // Reference practice is intentionally local-only; a confident
                     // webcam match is a scored attempt and must enter the upload
                     // queue so the seeded alphabet lesson can be recorded.
-                    synced = accuracy <= 0f, inputSource = accuracy > 0 ? "webcam-sasl-research" : "reference" });
+                    synced = false, inputSource = accuracy > 0 ? "webcam-sasl-research" : "reference" });
                 saveStatus = "Alphabet practice saved on this Mac";
+                if (apiConnected) StartCoroutine(SyncPending());
             }
             catch (Exception error) { Debug.LogWarning(error.Message); }
             if (alphabetIndex == 25) ShowHome(); else ShowAlphabet(alphabetIndex + 1);
+        }
+
+        static string AlphabetTip(string expected, string observed)
+        {
+            switch (expected)
+            {
+                case "K": return "Try lowering your middle finger a little and keep your index finger clearly raised.";
+                case "M": return "Tuck your thumb under the three curled fingers, then hold the knuckles together.";
+                case "N": return "Keep the thumb tucked under two fingers and relax the other fingers into the same row.";
+                case "R": return "Cross the index and middle fingers neatly, with the other fingers curled into the palm.";
+                case "T": return "Place the thumb across the index finger and keep the remaining fingers curled.";
+                case "U": return "Keep the index and middle fingers together and straight, with the other fingers curled.";
+                case "V": return "Separate the index and middle fingers into a clear V, keeping the other fingers curled.";
+                case "W": return "Raise three fingers together and keep the thumb and little finger tucked down.";
+                case "Y": return "Extend the thumb and little finger while curling the three middle fingers into your palm.";
+                default: return $"Bob sees {observed}; compare your {expected} with the example and check finger height, thumb placement and palm direction.";
+            }
         }
 
         void ShowGreeting()
@@ -230,7 +250,7 @@ namespace BCSignVR
             ClassroomUi.Label("WATCH THE MOVEMENT", example, -1.17f, .52f, .105f, ClassroomUi.DeepBlue);
             ClassroomUi.Picture("NID greeting reference", "SASL_Greetings_NID", example,
                 new Vector3(0, -.17f, -.05f), new Vector2(1.30f, 1.04f));
-            trackingText = ClassroomUi.Label("YOUR HAND  /  WEBCAM", learner, -1.17f, .52f, .105f, ClassroomUi.Green);
+            trackingText = ClassroomUi.Label("LIVE WEBCAM  /  YOUR MOVEMENT", learner, -1.17f, .52f, .095f, ClassroomUi.Green, maxWidth: 2.55f);
             liveView = new HandSkeletonView("Greeting learner hand", content, new Color(.22f, .65f, .55f), true);
             alphabetStatus = ClassroomUi.Label("Show your hand and copy the greeting movement.", content,
                 -3.05f, -1.64f, .15f, ClassroomUi.Ink, maxWidth: 4.5f);
@@ -263,7 +283,8 @@ namespace BCSignVR
             }
             history.Add(new LocalSessionRecord { lessonId = "basic-greeting", accuracy = 0,
                 durationSeconds = Mathf.Max(0, Time.time - lessonStarted), mistakes = 0, completed = true,
-                synced = true, inputSource = "reference" });
+                synced = false, inputSource = "reference" });
+            if (apiConnected) StartCoroutine(SyncPending());
             tutor?.Say("Great practice! We will add more reviewed phrases next.", true);
             ShowHome();
         }

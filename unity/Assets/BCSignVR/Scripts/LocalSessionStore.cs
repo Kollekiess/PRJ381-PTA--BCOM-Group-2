@@ -22,6 +22,7 @@ namespace BCSignVR
         public bool IsDemo => string.Equals(inputSource, "demo", StringComparison.OrdinalIgnoreCase);
         public bool IsReference => string.Equals(inputSource, "reference", StringComparison.OrdinalIgnoreCase);
         public bool IsScored => !IsDemo && !IsReference;
+        public bool IsSyncable => !IsDemo;
 
         internal LocalSessionRecord Copy() => (LocalSessionRecord)MemberwiseClone();
     }
@@ -46,14 +47,14 @@ namespace BCSignVR
         public int AlphabetPractisedCount => records.Where(record => record.completed && record.IsReference &&
             record.lessonId.StartsWith("alphabet-", StringComparison.OrdinalIgnoreCase))
             .Select(record => record.lessonId).Distinct(StringComparer.OrdinalIgnoreCase).Count();
-        public int PendingCount => records.Count(record => !record.synced && record.IsScored);
+        public int PendingCount => records.Count(record => !record.synced && record.IsSyncable);
         public float BestAccuracy => records.Where(record => record.completed && record.IsScored)
             .Select(record => record.accuracy).DefaultIfEmpty(0f).Max();
 
         // Copies prevent callers from changing saved data without a successful disk write.
         public IReadOnlyList<LocalSessionRecord> Records => records.Select(record => record.Copy()).ToArray();
         public IEnumerable<LocalSessionRecord> Pending => records
-            .Where(record => !record.synced && record.IsScored).Select(record => record.Copy()).ToArray();
+            .Where(record => !record.synced && record.IsSyncable).Select(record => record.Copy()).ToArray();
 
         /// <param name="path">Optional complete filename, useful for tests and separate learner profiles.</param>
         public LocalSessionStore(string path = null)

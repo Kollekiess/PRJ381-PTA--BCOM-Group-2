@@ -52,6 +52,27 @@ namespace BCSignVR.Tests
         }
 
         [Test]
+        public void ReferencePracticeIsQueuedForAccountHistory()
+        {
+            var store = new LocalSessionStore(path);
+            var saved = store.Add(new LocalSessionRecord
+            {
+                lessonId = "basic-greeting",
+                accuracy = 0f,
+                durationSeconds = 8f,
+                mistakes = 0,
+                completed = true,
+                synced = false,
+                inputSource = "reference"
+            });
+            Assert.AreEqual(1, store.PendingCount);
+            Assert.AreEqual(saved.id, store.Pending.Single().id);
+            Assert.AreEqual(0, store.TotalCompleted);
+            Assert.IsTrue(store.MarkSynced(saved.id));
+            Assert.AreEqual(0, new LocalSessionStore(path).PendingCount);
+        }
+
+        [Test]
         public void CorruptHistoryIsPreservedBeforeNewHistoryReplacesIt()
         {
             Directory.CreateDirectory(directory);
