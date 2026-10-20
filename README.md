@@ -8,7 +8,7 @@ Independent, from-scratch rescue prototype for a Meta Quest 3 South African Sign
 - Meta Quest 3-compatible OpenXR hand-joint input through Unity XR Hands.
 - Explicit demo mode with deterministic gesture poses for testing the lesson loop without a headset.
 - Live Mac webcam tracking via MediaPipe and a localhost-only hand-landmark bridge.
-- One-at-a-time SASL alphabet reference lessons and a beginner greeting preview, with local practice records.
+- One-at-a-time SASL alphabet reference lessons, HELLO/HOW ARE YOU fingerspelling practice, and a beginner greeting preview, with local practice records.
 - Hand-pose normalization and confidence scoring that is independent of hand size and world position.
 - A local API with password hashing, signed sessions, role checks, lessons, progress history, and SQLite persistence.
 - A capture-and-train pipeline for reviewed SASL hand-pose samples.
@@ -65,6 +65,16 @@ seeded lesson path, and camera frame, run:
 ```
 
 The classroom launcher keeps retrying the MediaPipe bridge if the camera temporarily stops delivering frames. In the lesson, `CAMERA / WAITING` means the bridge has not sent a packet yet; `YOUR HAND / NOT VISIBLE` means the camera is connected but no hand is currently detected.
+
+To capture a complete demonstration for later SASL review, use:
+
+```bash
+./scripts/record_sasl_sample.sh hello
+```
+
+The recording contains landmarks only. Keep it outside Git until a fluent SASL
+reviewer has approved the label, signer consent and source; then follow the
+reviewed training steps in `ml/README.md`.
 
 ## Run as a simulated Meta Quest 3
 
