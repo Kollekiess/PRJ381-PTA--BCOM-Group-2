@@ -699,7 +699,32 @@ namespace BCSignVR
             feedbackText = ClassroomUi.Label("Try the movement at your pace.", content, -3.05f, -1.61f, .16f, ClassroomUi.Ink, maxWidth: 6.1f);
             ClassroomUi.Button("<  Collection", content, -2.35f, -2.05f, 1.5f, ShowSasl, height: .35f);
             ClassroomUi.Button("Replay", content, -.65f, -2.05f, 1.25f, () => researchStarted = Time.time, height: .35f);
-            ClassroomUi.Button("Slow / normal", content, 1.15f, -2.05f, 1.85f, () => { slowReplay = !slowReplay; researchStarted = Time.time; }, height: .35f);
+            ClassroomUi.Button("Slow / normal", content, 1.00f, -2.05f, 1.65f, () => { slowReplay = !slowReplay; researchStarted = Time.time; }, height: .35f);
+            ClassroomUi.Button("Save practice", content, 2.55f, -2.05f, 1.25f, RecordResearchPractice, height: .35f);
+        }
+
+        void RecordResearchPractice()
+        {
+            if (inputMode != InputMode.Demo && !current.tracked)
+            {
+                feedbackText.text = "Show your full hand before saving this research practice.";
+                tutor?.Say("Bring your whole hand into view first.", true);
+                return;
+            }
+            var label = references.Label(researchIndex);
+            var lessonId = "research-sasl-" + label.Replace("RESEARCH_SASL_", "").ToLowerInvariant().Replace('_', '-');
+            try
+            {
+                history.Add(new LocalSessionRecord { lessonId = lessonId, accuracy = 0,
+                    durationSeconds = Mathf.Max(0, Time.time - researchStarted), mistakes = 0, completed = true,
+                    synced = false, inputSource = inputMode == InputMode.Camera ? "webcam-research-visual-practice" :
+                        inputMode == InputMode.VR ? "openxr-research-visual-practice" : "demo-research-visual-practice" });
+                saveStatus = "Research practice saved on this Mac";
+                if (apiConnected) StartCoroutine(SyncPending());
+                tutor?.Say("Research practice saved. Regional signs can vary, so keep comparing the reference.", true);
+                ShowSasl();
+            }
+            catch (Exception error) { savingFailed = true; Debug.LogWarning(error.Message); }
         }
 
         void UpdateResearchPractice()

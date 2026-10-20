@@ -99,6 +99,13 @@ def _reference_lesson_seeds():
          "Practise the letters in HOW ARE YOU one at a time. This is a fingerspelling pathway, not a validated SASL phrase-sign recognizer.",
          json.dumps(["TEAM_SASL_H", "TEAM_SASL_O", "TEAM_SASL_W", "TEAM_SASL_A", "TEAM_SASL_R", "TEAM_SASL_E", "TEAM_SASL_Y", "TEAM_SASL_O", "TEAM_SASL_U"]), "reference", "https://nid.org.za/resources/"),
     ))
+    alphabet.extend(
+        (f"research-sasl-{slug}", title, "research", "intermediate",
+         "Research movement practice from the University of the Free State collection; regional variation and teaching review are still required.",
+         json.dumps([f"RESEARCH_SASL_{slug.upper().replace('-', '_')}"]), "research",
+         "https://doi.org/10.38140/ufs.29376494.v2")
+        for slug, title in (("cape-town", "Cape Town"), ("bloemfontein", "Bloemfontein"), ("pretoria", "Pretoria"))
+    )
     return tuple(alphabet)
 
 

@@ -50,6 +50,9 @@ class ApiTests(unittest.TestCase):
         lesson_ids = {lesson["id"] for lesson in lessons["lessons"]}
         self.assertIn("phrase-fingerspell-hello", lesson_ids)
         self.assertIn("phrase-fingerspell-how-are-you", lesson_ids)
+        self.assertIn("research-sasl-cape-town", lesson_ids)
+        self.assertIn("research-sasl-bloemfontein", lesson_ids)
+        self.assertIn("research-sasl-pretoria", lesson_ids)
 
         status, saved = self.request("POST", "/api/sessions", {"lessonId": "prototype-open", "accuracy": 0.92, "durationSeconds": 12.4, "mistakes": 1, "completed": True, "inputSource": "webcam"}, token)
         self.assertEqual(201, status)
