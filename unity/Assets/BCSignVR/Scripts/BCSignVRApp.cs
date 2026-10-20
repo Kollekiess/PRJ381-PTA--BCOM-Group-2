@@ -163,18 +163,17 @@ namespace BCSignVR
         {
             var letter = ((char)('A' + alphabetIndex)).ToString();
             current.tracked = false;
-            if (inputMode == InputMode.Camera) webcam.TryGetRightHand(current);
-            else if (inputMode == InputMode.VR) openXr.TryGetRightHand(current);
-            else simulated.TryGetRightHand(current);
+            TryGetInputHand(current);
             liveView.SetPose(current, content.TransformPoint(new Vector3(1.67f, -1.19f, -.20f)),
                 Quaternion.Euler(0, 180, 0), .90f);
-            trackingText.text = current.tracked ? "YOUR HAND  /  LIVE" : inputMode == InputMode.Camera && !webcam.IsReceiving ?
+            trackingText.text = current.tracked ? inputMode == InputMode.Demo ? "YOUR DEMO HAND" : "YOUR HAND  /  LIVE" : inputMode == InputMode.Camera && !webcam.IsReceiving ?
                 "CAMERA  /  WAITING" : "YOUR HAND  /  NOT VISIBLE";
             var expected = "TEAM_SASL_" + letter;
-            if (current.tracked && webcam.RecognizedLabel == expected)
+            var recognized = inputMode == InputMode.Camera ? webcam.RecognizedLabel : "";
+            if (current.tracked && recognized == expected)
                 alphabetStatus.text = $"Bob sees {letter}  /  research match {webcam.RecognitionConfidence:P0}. Compare the example, then save practice.";
-            else if (current.tracked && webcam.RecognizedLabel.StartsWith("TEAM_SASL_"))
-                alphabetStatus.text = $"Bob sees {webcam.RecognizedLabel.Replace("TEAM_SASL_", "")}. Adjust your hand to match {letter}, then try again.";
+            else if (current.tracked && recognized.StartsWith("TEAM_SASL_"))
+                alphabetStatus.text = $"Bob sees {recognized.Replace("TEAM_SASL_", "")}. Adjust your hand to match {letter}, then try again.";
             else alphabetStatus.text = current.tracked
                 ? "Hand visible. Compare it with Bob's example, then choose Practised."
                 : inputMode == InputMode.Camera ? webcam.IsReceiving ? "Camera ready. Show your full hand to the webcam." :
@@ -244,9 +243,7 @@ namespace BCSignVR
         void UpdateBasics()
         {
             current.tracked = false;
-            if (inputMode == InputMode.Camera) webcam.TryGetRightHand(current);
-            else if (inputMode == InputMode.VR) openXr.TryGetRightHand(current);
-            else simulated.TryGetRightHand(current);
+            TryGetInputHand(current);
             liveView.SetPose(current, content.TransformPoint(new Vector3(1.67f, -1.18f, -.20f)),
                 Quaternion.Euler(0, 180, 0), .90f);
             trackingText.text = current.tracked ? "YOUR HAND  /  LIVE" : inputMode == InputMode.Camera && !webcam.IsReceiving ?
@@ -540,13 +537,20 @@ namespace BCSignVR
             var motion = references.GetPose(researchIndex, (Time.time - researchStarted) / duration, researchReference);
             targetView.SetPose(researchReference, content.TransformPoint(new Vector3(-1.67f, -1.15f, -.20f) + motion),
                 Quaternion.Euler(0, 180, 0), .87f);
-            current.tracked = false; webcam.TryGetRightHand(current);
+            current.tracked = false; TryGetInputHand(current);
             liveView.SetPose(current, content.TransformPoint(new Vector3(1.67f, -1.15f, -.20f)), Quaternion.Euler(0, 180, 0), .87f);
-            trackingText.text = current.tracked ? "YOUR HAND  /  LIVE" : !webcam.IsReceiving ? "CAMERA  /  WAITING" :
+            trackingText.text = current.tracked ? inputMode == InputMode.Demo ? "YOUR DEMO HAND" : "YOUR HAND  /  LIVE" : inputMode == InputMode.Camera && !webcam.IsReceiving ? "CAMERA  /  WAITING" :
                 "YOUR HAND  /  NOT VISIBLE";
             feedbackText.text = !current.tracked ? "Show your full hand to the webcam to try the movement." :
-                webcam.RecognizedLabel == references.Label(researchIndex) ? $"Similar movement detected  /  similarity {webcam.RecognitionConfidence:P0}" :
+                inputMode == InputMode.Camera && webcam.RecognizedLabel == references.Label(researchIndex) ? $"Similar movement detected  /  similarity {webcam.RecognitionConfidence:P0}" :
                 "Watch the shape and direction, then try the movement again.";
+        }
+
+        void TryGetInputHand(HandPoseFrame destination)
+        {
+            if (inputMode == InputMode.Camera) webcam.TryGetRightHand(destination);
+            else if (inputMode == InputMode.VR) openXr.TryGetRightHand(destination);
+            else simulated.TryGetRightHand(destination);
         }
 
         IEnumerator UpdateResearchPrediction()
