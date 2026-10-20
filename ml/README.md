@@ -30,3 +30,23 @@ python3 ml/prepare_reviewed_samples.py recordings/anon-001-a.jsonl samples/anon-
 
 Repeat across signers and variants, combine the reviewed JSONL files, and run the trainer. Do not label a recording from the English letter name alone; the label is an assertion that a SASL reviewer approved the actual handshape and source.
 
+## Reviewed movement/phrase recordings
+
+For a dynamic word or phrase, record one complete demonstration as JSONL and
+have a fluent SASL reviewer approve the actual movement, signer consent and
+label. Then build a sequence model:
+
+```sh
+.venv/bin/python webcam/hand_bridge.py --no-preview --record recordings/anon-001-hello.jsonl
+.venv/bin/python ml/train_sequence_model.py recordings/anon-001-hello.jsonl \
+  unity/Assets/Resources/sasl_sequence_model.json \
+  --label REVIEWED_SASL_HELLO --signer anonymous-001 \
+  --reviewed-by "reviewer-id" --source "consented capture; review form 2026-01"
+```
+
+The trainer samples the movement into the 32-frame sequence format already
+used by the live bridge. It refuses unreviewed labels, malformed landmarks and
+short recordings. The checked-in model remains unchanged until real reviewed
+SASL recordings are supplied; Maswao annotations alone are not sufficient for
+that substitution.
+
