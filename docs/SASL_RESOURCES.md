@@ -1,0 +1,40 @@
+# SASL reference and licensing notes
+
+This project uses external SASL references as research leads, not as a claim
+that every image or sign has been validated for teaching. The lesson content
+must be reviewed by a fluent SASL signer or educator before it is labelled
+`REVIEWED_SASL_*` and used for model training.
+
+## Useful authoritative starting points
+
+- [National Institute for the Deaf resources](https://nid.org.za/resources/)
+  provides SASL learning resources, including alphabet/counting material,
+  commonly used signs, and a SASL video dictionary/course material.
+- [WCED ePortal SASL teaching plan](https://wcedeportal.westerncape.gov.za/eresource/2020-national-revised-teaching-plans-gr-7-south-african-sign-language-sasl-home-policy)
+  is an education-sector source for curriculum and teaching context. The
+  portal also publishes individual SASL terminology videos under the same
+  Creative Commons Attribution-NonCommercial-NoDerivatives terms; verify the
+  exact asset licence before reusing any media.
+
+These links are reference-only in the app. NID states that its site content is
+owned by NID, so posters, video frames, and dictionary media must not be copied
+into this repository or redistributed without permission. The standalone app
+currently imports only the PRJ team's A–Z landmark baseline, whose provenance
+and limitations are recorded in `ml/team_sasl/SOURCE.md`.
+
+## What is and is not trained today
+
+- A–Z: the imported team landmark model is runnable locally and is gated as a
+  research baseline (`TEAM_SASL_*`). Its published holdout is reproduced at
+  77.45%; it is not a community-validated SASL dictionary.
+- Words and phrases: the app has lesson slots and progression plumbing, but
+  there are no reviewer-approved “hello” or “how are you” landmark sequences
+  checked into this project yet. Do not present the phrase lessons as trained
+  recognition until consented recordings have been reviewed and labelled.
+
+## Safe path to phrase recognition
+
+Capture landmark-only recordings with consent, have a fluent SASL reviewer
+verify each sign and movement, label the rows with `REVIEWED_SASL_*`, then run
+the workflow in `ml/README.md`. Keep identities outside the repository and
+retain the review/source record alongside the dataset release.
