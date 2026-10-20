@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from hand_bridge import (AlphabetTemplateRecognizer, DenseAlphabetRecognizer, packet_for, read_camera_frame,
-                         select_primary_hand, SequenceRecognizer)
+                         select_primary_hand, choose_recognition, SequenceRecognizer)
 
 
 def example_hand():
@@ -19,6 +19,14 @@ def prototype(label, features, threshold=.1):
 
 
 class PacketTests(unittest.TestCase):
+    def test_reviewed_sequence_result_is_not_overwritten_by_alphabet_fallback(self):
+        self.assertEqual(("REVIEWED_SASL_HELLO", .91), choose_recognition(
+            ("REVIEWED_SASL_HELLO", .91), ("TEAM_SASL_H", .88)))
+
+    def test_unknown_sequence_uses_alphabet_fallback(self):
+        self.assertEqual(("TEAM_SASL_H", .88), choose_recognition(
+            ("UNKNOWN", 0), ("TEAM_SASL_H", .88)))
+
     def test_packet_has_media_pipe_joint_order(self):
         packet = packet_for(example_hand(), "Right", 1280, 720)
         self.assertEqual(21, len(packet["landmarks"]))

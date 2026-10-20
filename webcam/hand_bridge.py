@@ -265,6 +265,14 @@ def select_primary_hand(hand_landmarks, handedness):
     return 0
 
 
+def choose_recognition(sequence_result, alphabet_result):
+    """Keep reviewed/recorded sequence labels ahead of static A–Z fallback."""
+    sequence_label, sequence_confidence = sequence_result
+    if sequence_label.startswith(("RESEARCH_SASL_", "REVIEWED_SASL_")):
+        return sequence_result
+    return alphabet_result
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--camera", type=int, default=0)
@@ -342,8 +350,8 @@ def main() -> None:
                     handedness = labels[primary_index]
                     recognized, confidence = recognizer.update(landmarks)
                     alphabet_label, alphabet_confidence = alphabet_recognizer.update(landmarks)
-                    if not recognized.startswith("RESEARCH_SASL_"):
-                        recognized, confidence = alphabet_label, alphabet_confidence
+                    recognized, confidence = choose_recognition(
+                        (recognized, confidence), (alphabet_label, alphabet_confidence))
                     packet = packet_for(landmarks, handedness, frame.shape[1], frame.shape[0],
                                         recognized, confidence)
                     # Keep legacy primary-hand fields for Unity, while retaining
