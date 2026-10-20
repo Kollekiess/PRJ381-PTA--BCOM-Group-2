@@ -16,6 +16,13 @@ must be reviewed by a fluent SASL signer or educator before it is labelled
   Creative Commons Attribution-NonCommercial-NoDerivatives terms; verify the
   exact asset licence before reusing any media.
 
+- [Maswao dataset construction repository](https://github.com/dsfsi/maswo-south-african-sign-language-dataset)
+  is a useful SASL research lead, but its repository distributes video
+  identifiers and annotations rather than the interpreter footage itself. The
+  current metadata is weakly aligned sentence-level material, not a reviewed
+  webcam landmark set for individual words. It therefore has not been copied
+  into the app or used to claim phrase-recognition accuracy.
+
 The included greeting card is kept as a private prototype reference with NID
 attribution; it is not a trained recognition target. NID states that its site
 content is owned by NID, so posters, video frames, and dictionary media need
@@ -33,6 +40,11 @@ baseline, whose provenance and limitations are recorded in
   there are no reviewer-approved “hello” or “how are you” landmark sequences
   checked into this project yet. Do not present the phrase lessons as trained
   recognition until consented recordings have been reviewed and labelled.
+
+The distinction matters here: a spoken-language transcript or a sign-language
+video identifier can help locate candidate teaching material, but it does not
+provide the hand, body, face, timing and signer metadata required to train a
+reliable learner-facing recognizer.
 
 ## Safe path to phrase recognition
 
