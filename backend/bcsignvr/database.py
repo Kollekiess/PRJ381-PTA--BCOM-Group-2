@@ -91,6 +91,14 @@ def _reference_lesson_seeds():
         "Watch the attributed reference and practise the movement. This is visual practice until a reviewed phrase model is available.",
         json.dumps(["REFERENCE_GREETING"]), "reference", "https://nid.org.za/resources/"
     ))
+    alphabet.extend((
+        ("phrase-fingerspell-hello", "Fingerspell: HELLO", "phrases", "beginner",
+         "Practise the letters H-E-L-L-O one at a time. This is a fingerspelling pathway, not a validated SASL word-sign recognizer.",
+         json.dumps(["TEAM_SASL_H", "TEAM_SASL_E", "TEAM_SASL_L", "TEAM_SASL_L", "TEAM_SASL_O"]), "reference", "https://nid.org.za/resources/"),
+        ("phrase-fingerspell-how-are-you", "Fingerspell: HOW ARE YOU", "phrases", "beginner",
+         "Practise the letters in HOW ARE YOU one at a time. This is a fingerspelling pathway, not a validated SASL phrase-sign recognizer.",
+         json.dumps(["TEAM_SASL_H", "TEAM_SASL_O", "TEAM_SASL_W", "TEAM_SASL_A", "TEAM_SASL_R", "TEAM_SASL_E", "TEAM_SASL_Y", "TEAM_SASL_O", "TEAM_SASL_U"]), "reference", "https://nid.org.za/resources/"),
+    ))
     return tuple(alphabet)
 
 

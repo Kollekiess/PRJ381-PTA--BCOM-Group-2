@@ -10,7 +10,7 @@ namespace BCSignVR
     public sealed class BCSignVRApp : MonoBehaviour
     {
         public enum InputMode { Camera, VR, Demo }
-        enum Page { Home, Practice, Results, Progress, Help, Sasl, Input, SaslPractice, Alphabet, Basics }
+        enum Page { Home, Practice, Results, Progress, Help, Sasl, Input, SaslPractice, Alphabet, Basics, Fingerspell }
         static readonly string[] LessonIds = { "prototype-open", "prototype-fist", "prototype-point" };
         static readonly string[] Titles = { "Open your hand", "Make a gentle fist", "Point your index finger" };
         static readonly string[] Labels = { "DEMO_OPEN", "DEMO_FIST", "DEMO_POINT" };
@@ -52,6 +52,12 @@ namespace BCSignVR
         int alphabetIndex;
         int alphabetMistakes;
         TextMesh alphabetStatus;
+        string fingerspellPhrase = "HELLO";
+        string fingerspellLetters = "HELLO";
+        int fingerspellIndex;
+        int fingerspellMistakes;
+        float fingerspellStarted, fingerspellHeld;
+        readonly List<float> fingerspellScores = new();
 
         void Awake()
         {
@@ -265,10 +271,131 @@ namespace BCSignVR
             liveView = new HandSkeletonView("Greeting learner hand", content, new Color(.22f, .65f, .55f), true);
             alphabetStatus = ClassroomUi.Label("Show your hand and copy the greeting movement.", content,
                 -3.05f, -1.64f, .15f, ClassroomUi.Ink, maxWidth: 4.5f);
-            ClassroomUi.Button("<  Classroom", content, -2.35f, -2.08f, 1.50f, ShowHome, height: .35f);
-            ClassroomUi.Button("Save visual practice", content, 1.72f, -2.08f, 2.15f, RecordGreeting, true, .35f);
+            ClassroomUi.Button("<  Classroom", content, -2.45f, -2.08f, 1.35f, ShowHome, height: .35f);
+            ClassroomUi.Button("Spell HELLO", content, -.95f, -2.08f, 1.35f, () => ShowFingerspell("HELLO"), true, .35f);
+            ClassroomUi.Button("Spell HOW ARE YOU", content, .65f, -2.08f, 1.80f, () => ShowFingerspell("HOW ARE YOU"), height: .35f);
+            ClassroomUi.Button("Save practice", content, 2.55f, -2.08f, 1.25f, RecordGreeting, height: .35f);
             ClassroomUi.Label("Reference: National Institute for the Deaf", content, 3.05f, -1.72f, .09f,
                 ClassroomUi.Muted, TextAnchor.MiddleRight, 3f);
+        }
+
+        void ShowFingerspell(string phrase)
+        {
+            fingerspellPhrase = string.IsNullOrWhiteSpace(phrase) ? "HELLO" : phrase.ToUpperInvariant();
+            fingerspellLetters = fingerspellPhrase.Replace(" ", "");
+            fingerspellIndex = 0;
+            fingerspellMistakes = 0;
+            fingerspellHeld = 0;
+            fingerspellScores.Clear();
+            fingerspellStarted = Time.time;
+            BeginPage(Page.Fingerspell);
+            tutor?.Say($"Let's fingerspell {fingerspellPhrase}. One letter at a time, nice and clear.", true);
+            RenderFingerspellPage();
+        }
+
+        void RenderFingerspellPage()
+        {
+            var letter = fingerspellLetters[fingerspellIndex].ToString();
+            ClassroomUi.Label($"Fingerspell  {fingerspellPhrase}", content, -3.06f, .61f, .29f, ClassroomUi.Ink);
+            ClassroomUi.Label($"LETTER {fingerspellIndex + 1} / {fingerspellLetters.Length}", content, 3.06f, .61f, .15f, ClassroomUi.Blue, TextAnchor.MiddleRight);
+            ClassroomUi.Label("This is fingerspelling practice, not a claim that the English spelling replaces a SASL word sign.",
+                content, -3.06f, .25f, .12f, ClassroomUi.Muted, maxWidth: 6.2f);
+            var example = ClassroomUi.Panel("Fingerspelling example", content, new Vector3(-1.67f, -.69f, 0),
+                new Vector2(2.83f, 1.52f), new Color(.94f, .98f, 1f), .16f, true).transform;
+            var learner = ClassroomUi.Panel("Learner webcam", content, new Vector3(1.67f, -.69f, 0),
+                new Vector2(2.83f, 1.52f), new Color(.95f, .98f, .97f), .16f, true).transform;
+            ClassroomUi.Label("BOB'S EXAMPLE", example, -1.17f, .51f, .115f, ClassroomUi.DeepBlue);
+            ClassroomUi.FontLabel(letter, "NIDSASLFingerspell-Regular", example, 0, -.05f, 1.98f, ClassroomUi.Ink);
+            trackingText = ClassroomUi.Label("LIVE WEBCAM  /  YOUR MOVEMENT", learner, -1.17f, .51f, .105f, ClassroomUi.Green, maxWidth: 2.55f);
+            webcamPreview = new WebcamPreviewView("Phrase webcam preview", learner, new Vector3(0, -.16f, -.045f), new Vector2(2.56f, .88f));
+            liveView = new HandSkeletonView("Phrase learner hand", content, new Color(.22f, .65f, .55f), true);
+            alphabetStatus = ClassroomUi.Label($"Show the handshape for {letter}.", content, -3.05f, -1.64f, .15f,
+                ClassroomUi.Ink, maxWidth: 6.1f);
+            ClassroomUi.Button("<  Greeting", content, -2.45f, -2.08f, 1.45f, ShowGreeting, height: .35f);
+            ClassroomUi.Button("Check letter", content, .55f, -2.08f, 1.55f, CheckFingerspellLetter, true, .35f);
+            ClassroomUi.Button("Skip letter", content, 2.30f, -2.08f, 1.35f, SkipFingerspellLetter, height: .35f);
+        }
+
+        void UpdateFingerspell()
+        {
+            var expected = "TEAM_SASL_" + fingerspellLetters[fingerspellIndex];
+            current.tracked = false;
+            TryGetInputHand(current);
+            webcamPreview?.SetBase64(inputMode == InputMode.Camera ? webcam.PreviewJpeg : "");
+            liveView.SetPose(current, content.TransformPoint(new Vector3(1.67f, -1.19f, -.20f)),
+                Quaternion.Euler(0, 180, 0), .90f);
+            trackingText.text = current.tracked ? inputMode == InputMode.Camera ? "LIVE WEBCAM  /  YOUR MOVEMENT" : "YOUR HAND  /  LIVE" :
+                inputMode == InputMode.Camera && !webcam.IsReceiving ? "CAMERA  /  WAITING" : "YOUR HAND  /  NOT VISIBLE";
+            if (current.tracked && inputMode == InputMode.Camera && webcam.RecognizedLabel == expected)
+            {
+                fingerspellHeld += Time.deltaTime;
+                alphabetStatus.text = $"Bob sees {fingerspellLetters[fingerspellIndex]}  /  {webcam.RecognitionConfidence:P0}. Hold it steady, then check.";
+                tutor?.Say("That handshape is looking good. Hold it steady.");
+            }
+            else
+            {
+                fingerspellHeld = 0;
+                alphabetStatus.text = current.tracked ? "Hand visible. Compare your fingers with Bob's example." :
+                    inputMode == InputMode.Camera ? "Show your full hand to the webcam." : "Raise your hand in front of you.";
+                if (current.tracked && inputMode == InputMode.Camera && webcam.RecognizedLabel.StartsWith("TEAM_SASL_") && webcam.RecognitionConfidence >= .60f)
+                {
+                    var observed = webcam.RecognizedLabel.Replace("TEAM_SASL_", "");
+                    tutor?.Say(AlphabetTip(fingerspellLetters[fingerspellIndex].ToString(), observed));
+                }
+            }
+        }
+
+        void CheckFingerspellLetter()
+        {
+            var expected = "TEAM_SASL_" + fingerspellLetters[fingerspellIndex];
+            var correct = inputMode == InputMode.Camera && current.tracked && webcam.RecognizedLabel == expected && webcam.RecognitionConfidence >= .60f;
+            if (inputMode == InputMode.Demo) correct = current.tracked;
+            if (!correct)
+            {
+                fingerspellMistakes++;
+                var observed = webcam.RecognizedLabel.StartsWith("TEAM_SASL_") ? webcam.RecognizedLabel.Replace("TEAM_SASL_", "") : "unknown";
+                var tip = observed == "unknown" ? "Show the whole hand, then try the letter again." : AlphabetTip(fingerspellLetters[fingerspellIndex].ToString(), observed);
+                alphabetStatus.text = tip;
+                tutor?.Say(tip, true);
+                return;
+            }
+            fingerspellScores.Add(inputMode == InputMode.Camera ? webcam.RecognitionConfidence : .75f);
+            fingerspellHeld = 0;
+            if (++fingerspellIndex < fingerspellLetters.Length) RenderFingerspellPage();
+            else CompleteFingerspellPhrase();
+        }
+
+        void SkipFingerspellLetter()
+        {
+            fingerspellMistakes++;
+            fingerspellScores.Add(0);
+            if (++fingerspellIndex < fingerspellLetters.Length) RenderFingerspellPage();
+            else CompleteFingerspellPhrase();
+        }
+
+        void CompleteFingerspellPhrase()
+        {
+            var average = 0f;
+            foreach (var score in fingerspellScores) average += score;
+            average /= Mathf.Max(1, fingerspellScores.Count);
+            try
+            {
+                history.Add(new LocalSessionRecord { lessonId = "phrase-fingerspell-" + fingerspellPhrase.ToLowerInvariant().Replace(" ", "-"),
+                    accuracy = Mathf.Clamp01(average), durationSeconds = Mathf.Max(0, Time.time - fingerspellStarted),
+                    mistakes = fingerspellMistakes, completed = true, synced = false,
+                    inputSource = inputMode == InputMode.Camera ? "webcam-sasl-fingerspelling" : inputMode == InputMode.VR ? "openxr-fingerspelling" : "demo-fingerspelling" });
+                saveStatus = "Phrase practice saved on this Mac";
+                if (apiConnected) StartCoroutine(SyncPending());
+            }
+            catch (Exception error) { savingFailed = true; Debug.LogWarning(error.Message); }
+            BeginPage(Page.Results);
+            tutor?.Say($"You completed fingerspelling {fingerspellPhrase}! Next, we can add reviewed SASL word signs.", true);
+            ClassroomUi.Label("Phrase practice complete", content, 0, .52f, .34f, ClassroomUi.DeepBlue, TextAnchor.MiddleCenter);
+            ClassroomUi.Label($"{fingerspellPhrase}  /  {fingerspellScores.Count} letters", content, 0, .08f, .20f, ClassroomUi.Ink, TextAnchor.MiddleCenter);
+            ClassroomUi.Label($"Practice accuracy  {average:P0}", content, 0, -.35f, .17f, ClassroomUi.Muted, TextAnchor.MiddleCenter);
+            ClassroomUi.Label("This saved a fingerspelling session. It does not replace a reviewed SASL phrase sign.", content,
+                0, -.82f, .12f, ClassroomUi.Muted, TextAnchor.MiddleCenter, 6.0f);
+            ClassroomUi.Button("Back to classroom", content, 0, -1.75f, 2.15f, ShowHome, true);
         }
 
         void UpdateBasics()
@@ -373,6 +500,7 @@ namespace BCSignVR
             if (Input.GetKeyDown(KeyCode.Escape)) ShowHome();
             if (page == Page.Alphabet) { UpdateAlphabet(); return; }
             if (page == Page.Basics) { UpdateBasics(); return; }
+            if (page == Page.Fingerspell) { UpdateFingerspell(); return; }
             if (page == Page.SaslPractice) { UpdateResearchPractice(); return; }
             if (page != Page.Practice) return;
             if (inputMode == InputMode.Demo)
