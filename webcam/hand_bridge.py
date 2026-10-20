@@ -168,8 +168,12 @@ def main() -> None:
     camera = cv2.VideoCapture(str(args.video)) if args.video else open_camera(args.camera)
     if camera is None or not camera.isOpened():
         raise SystemExit("Could not open the webcam. Check macOS Camera permission for Terminal/Codex.")
-    camera.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+
+    def configure_camera(device):
+        device.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        device.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+
+    configure_camera(camera)
     sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     drawing = mp.solutions.drawing_utils
     hands_api = mp.solutions.hands
@@ -190,7 +194,22 @@ def main() -> None:
             min_tracking_confidence=0.55,
         ) as hands:
             while True:
-                frame = read_camera_frame(camera, tracking_lost, video=bool(args.video))
+                try:
+                    frame = read_camera_frame(camera, tracking_lost, video=bool(args.video))
+                except RuntimeError:
+                    # macOS cameras can briefly disappear when another app claims
+                    # them. Re-open the device here so Unity keeps its session and
+                    # receives a clean tracking-loss packet while we recover.
+                    tracking_lost()
+                    if args.video:
+                        raise
+                    camera.release()
+                    time.sleep(1.0)
+                    camera = open_camera(args.camera)
+                    if camera is None:
+                        continue
+                    configure_camera(camera)
+                    continue
                 if frame is None:
                     break
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)

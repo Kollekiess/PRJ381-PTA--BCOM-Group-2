@@ -128,6 +128,14 @@ class CameraReadTests(unittest.TestCase):
         camera.read.assert_called_once()
         sleep.assert_not_called()
 
+    def test_camera_open_fallback_skips_preferred_failure(self):
+        from hand_bridge import open_camera
+        failed = Mock(isOpened=Mock(return_value=False))
+        working = Mock(isOpened=Mock(return_value=True))
+        with patch("hand_bridge.cv2.VideoCapture", side_effect=[failed, working]):
+            self.assertIs(working, open_camera(2))
+        failed.release.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()
