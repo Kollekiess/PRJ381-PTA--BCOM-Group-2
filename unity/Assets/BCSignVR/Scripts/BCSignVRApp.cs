@@ -251,6 +251,8 @@ namespace BCSignVR
             ClassroomUi.Label("BEGINNER PHRASES  /  1", content, 3.06f, .61f, .12f, ClassroomUi.Blue, TextAnchor.MiddleRight);
             ClassroomUi.Label("Movement, face and body position all carry meaning in SASL.",
                 content, -3.06f, .25f, .14f, ClassroomUi.Muted, maxWidth: 6.1f);
+            ClassroomUi.Label("VISUAL PRACTICE ONLY  /  phrase scoring unlocks after reviewed SASL recordings",
+                content, -3.06f, .02f, .105f, ClassroomUi.Blue, maxWidth: 6.1f);
             var example = ClassroomUi.Panel("Greeting reference", content, new Vector3(-1.67f, -.68f, 0),
                 new Vector2(2.83f, 1.55f), new Color(.94f, .98f, 1f), .16f, true).transform;
             var learner = ClassroomUi.Panel("Greeting learner", content, new Vector3(1.67f, -.68f, 0),
@@ -264,7 +266,7 @@ namespace BCSignVR
             alphabetStatus = ClassroomUi.Label("Show your hand and copy the greeting movement.", content,
                 -3.05f, -1.64f, .15f, ClassroomUi.Ink, maxWidth: 4.5f);
             ClassroomUi.Button("<  Classroom", content, -2.35f, -2.08f, 1.50f, ShowHome, height: .35f);
-            ClassroomUi.Button("Practised greeting", content, 1.72f, -2.08f, 2.15f, RecordGreeting, true, .35f);
+            ClassroomUi.Button("Save visual practice", content, 1.72f, -2.08f, 2.15f, RecordGreeting, true, .35f);
             ClassroomUi.Label("Reference: National Institute for the Deaf", content, 3.05f, -1.72f, .09f,
                 ClassroomUi.Muted, TextAnchor.MiddleRight, 3f);
         }
