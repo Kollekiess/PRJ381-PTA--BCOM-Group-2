@@ -44,6 +44,9 @@ namespace BCSignVR
         bool lessonCompleted, syncing, savingFailed;
         string token, saveStatus = "Saved on this Mac";
         bool apiConnected;
+        bool remoteProgressLoaded;
+        int remoteCompleted;
+        float remoteAverage;
         bool preview;
         TutorAvatar tutor;
         int alphabetIndex;
@@ -486,13 +489,15 @@ namespace BCSignVR
         {
             BeginPage(Page.Progress);
             ClassroomUi.Label("Your practice, at a glance.", content, -3.06f, .56f, .29f, ClassroomUi.Ink);
-            ClassroomUi.Label("Tracked exercises are saved here on your Mac.", content, -3.06f, .19f, .155f, ClassroomUi.Muted);
-            Metric("TRACKED EXERCISES", history.TotalCompleted.ToString(), -2.05f);
-            Metric("BEST MATCH", history.TotalCompleted == 0 ? "--" : history.BestAccuracy.ToString("P0"), 0);
+            ClassroomUi.Label(remoteProgressLoaded ? "Saved to your learner account and this Mac." : "Saved here on your Mac; account sync will appear when connected.",
+                content, -3.06f, .19f, .155f, ClassroomUi.Muted);
+            Metric("ACCOUNT COMPLETED", remoteProgressLoaded ? remoteCompleted.ToString() : history.TotalCompleted.ToString(), -2.05f);
+            Metric("ACCOUNT AVERAGE", remoteProgressLoaded ? remoteAverage.ToString("P0") : history.TotalCompleted == 0 ? "--" : history.BestAccuracy.ToString("P0"), 0);
             Metric("ALPHABET", history.AlphabetPractisedCount + " / 26", 2.05f);
             ClassroomUi.Label(history.PendingCount > 0 ? $"{history.PendingCount} results waiting to sync. Your local copy is saved." :
                 "Ready when you are. A little practice adds up.", content, 0, -1.35f, .15f, ClassroomUi.Muted, TextAnchor.MiddleCenter, 6f);
             ClassroomUi.Button("Start a warm-up", content, 0, -1.93f, 2.55f, StartWarmup, true);
+            if (apiConnected) StartCoroutine(RefreshRemoteProgress());
         }
 
         void ShowHelp()
@@ -625,7 +630,29 @@ namespace BCSignVR
             token = JsonUtility.FromJson<AuthResponse>(response).token;
             apiConnected = !string.IsNullOrEmpty(token);
             UpdateConnectionLabel();
-            if (apiConnected && !preview) yield return SyncPending();
+            if (apiConnected && !preview)
+            {
+                yield return SyncPending();
+                yield return RefreshRemoteProgress();
+            }
+        }
+
+        IEnumerator RefreshRemoteProgress()
+        {
+            if (!apiConnected || string.IsNullOrEmpty(token)) yield break;
+            using var request = Request("http://127.0.0.1:8787/api/progress", "GET", null);
+            request.SetRequestHeader("Authorization", $"Bearer {token}");
+            yield return request.SendWebRequest();
+            if (request.result != UnityWebRequest.Result.Success) yield break;
+            try
+            {
+                var progress = JsonUtility.FromJson<ProgressResponse>(request.downloadHandler.text);
+                if (progress?.summary == null) yield break;
+                remoteCompleted = Mathf.Max(0, progress.summary.completed);
+                remoteAverage = Mathf.Clamp01(progress.summary.averageAccuracy);
+                remoteProgressLoaded = true;
+            }
+            catch (Exception error) { Debug.LogWarning($"Account progress could not be read: {error.Message}"); }
         }
 
         IEnumerator SyncPending()
@@ -672,13 +699,19 @@ namespace BCSignVR
 
         static UnityWebRequest Request(string url, string method, string json)
         {
-            var request = new UnityWebRequest(url, method) { uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(json)),
-                downloadHandler = new DownloadHandlerBuffer(), timeout = 3 };
-            request.SetRequestHeader("Content-Type", "application/json"); return request;
+            var request = new UnityWebRequest(url, method) { downloadHandler = new DownloadHandlerBuffer(), timeout = 3 };
+            if (!string.IsNullOrEmpty(json))
+            {
+                request.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(json));
+                request.SetRequestHeader("Content-Type", "application/json");
+            }
+            return request;
         }
         void OnDestroy() => webcam?.Dispose();
         [Serializable] sealed class AuthRequest { public string name; public string email; public string password; }
         [Serializable] sealed class AuthResponse { public string token; }
+        [Serializable] sealed class ProgressResponse { public ProgressSummary summary; }
+        [Serializable] sealed class ProgressSummary { public int completed; public float averageAccuracy; }
     }
 
     public sealed class HeadPoseDriver : MonoBehaviour
