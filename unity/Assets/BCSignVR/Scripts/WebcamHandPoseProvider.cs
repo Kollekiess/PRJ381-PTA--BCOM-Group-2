@@ -30,6 +30,7 @@ namespace BCSignVR
         bool running = true;
 
         public string DisplayName => "Mac webcam hands";
+        public string DetectedHand { get; private set; } = "Right";
         public string RecognizedLabel { get; private set; } = "COLLECTING_MOVEMENT";
         public float RecognitionConfidence { get; private set; }
         public string PreviewJpeg { get; private set; } = "";
@@ -70,6 +71,7 @@ namespace BCSignVR
             foreach (var point in packet.landmarks)
                 if (point == null || !Finite(point.x) || !Finite(point.y) || !Finite(point.z)) return false;
             MapMediaPipe(packet.landmarks, destination);
+            DetectedHand = string.IsNullOrWhiteSpace(packet.handedness) ? "Right" : packet.handedness;
             RecognizedLabel = string.IsNullOrEmpty(packet.recognized) ? "UNKNOWN" : packet.recognized;
             RecognitionConfidence = Finite(packet.confidence) ? Mathf.Clamp01(packet.confidence) : 0;
             if (!string.IsNullOrEmpty(packet.previewJpeg)) PreviewJpeg = packet.previewJpeg;
