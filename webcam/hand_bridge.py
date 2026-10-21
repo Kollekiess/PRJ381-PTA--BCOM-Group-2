@@ -252,9 +252,9 @@ def discover_mac_camera_index() -> int:
     return max(candidates, default=(0, 0))[1]
 
 
-def open_camera(preferred: int):
-    """Open the preferred Mac camera, falling back to another connected index."""
-    indices = [preferred] + [index for index in range(4) if index != preferred]
+def open_camera(preferred: int, *, fallback: bool = True):
+    """Open the preferred camera, optionally falling back to another index."""
+    indices = [preferred] if not fallback else [preferred] + [index for index in range(4) if index != preferred]
     for index in indices:
         camera = cv2.VideoCapture(index)
         if camera.isOpened():
@@ -334,13 +334,14 @@ def main() -> None:
                         "ml/team_sasl/sasl_labels.json")
     args = parser.parse_args()
 
+    mac_camera = not args.video and str(args.camera).lower() in {"mac", "builtin", "built-in", "auto"}
     if args.video:
         camera_index = None
-    elif str(args.camera).lower() in {"mac", "builtin", "built-in", "auto"}:
+    elif mac_camera:
         camera_index = discover_mac_camera_index()
     else:
         camera_index = int(args.camera)
-    camera = cv2.VideoCapture(str(args.video)) if args.video else open_camera(camera_index)
+    camera = cv2.VideoCapture(str(args.video)) if args.video else open_camera(camera_index, fallback=not mac_camera)
     if not args.video:
         print(f"Using Mac camera index {camera_index} (built-in preference)", flush=True)
     if camera is None or not camera.isOpened():
@@ -386,7 +387,7 @@ def main() -> None:
                         raise
                     camera.release()
                     time.sleep(1.0)
-                    camera = open_camera(camera_index)
+                    camera = open_camera(camera_index, fallback=not mac_camera)
                     if camera is None:
                         continue
                     configure_camera(camera)
