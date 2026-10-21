@@ -5,7 +5,8 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from hand_bridge import (AlphabetTemplateRecognizer, DenseAlphabetRecognizer, packet_for, read_camera_frame,
-                         packet_hands, select_primary_hand, choose_recognition, SequenceRecognizer)
+                         packet_hands, select_primary_hand, choose_recognition, SequenceRecognizer,
+                         discover_mac_camera_index)
 
 
 def example_hand():
@@ -155,6 +156,14 @@ class AlphabetTemplateTests(unittest.TestCase):
 
 
 class CameraReadTests(unittest.TestCase):
+    @patch("hand_bridge.subprocess.run")
+    def test_mac_camera_discovery_prefers_facetime_over_iphone(self, run):
+        run.return_value = SimpleNamespace(stdout="", stderr=(
+            "[AVFoundation indev @ 0x] AVFoundation video devices:\n"
+            "[AVFoundation indev @ 0x] [0] iPhone Camera\n"
+            "[AVFoundation indev @ 0x] [1] FaceTime HD Camera\n"))
+        self.assertEqual(1, discover_mac_camera_index())
+
     @patch("hand_bridge.time.sleep")
     def test_transient_failure_reports_loss_and_recovers(self, sleep):
         frame = object()

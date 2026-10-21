@@ -211,6 +211,7 @@ namespace BCSignVR
                 var observed = webcam.RecognizedLabel.Replace("TEAM_SASL_", "");
                 var tip = AlphabetTip(letter, observed);
                 alphabetStatus.text = $"Not quite {letter}. Bob sees {observed}. {tip}";
+                tutor?.CoachCorrection();
                 tutor?.Say(tip, true);
                 return;
             }
@@ -531,12 +532,14 @@ namespace BCSignVR
                 if (inputMode != InputMode.Demo && matchHeld >= 1.25f) CompleteLesson(match);
                 if (!current.tracked)
                 {
+                    tutor?.CoachWaiting();
                     tutor?.Say("Let me see your whole hand. Good lighting helps!");
                     feedbackText.text = inputMode == InputMode.Camera ? "Show your full hand to the webcam." : "Raise your hand in front of you.";
                     matchText.text = "Waiting for hand";
                 }
                 else
                 {
+                    if (!correct) tutor?.CoachCorrection();
                     tutor?.Say(correct ? "Looking good! Hold it steady for a moment." : PoseHint(lessonIndex));
                     feedbackText.text = correct ? inputMode == InputMode.Demo ? "Ready! Choose Check hand." : "That's it! Hold your hand steady." : PoseHint(lessonIndex);
                     matchText.text = $"{match:P0} match";
@@ -575,6 +578,7 @@ namespace BCSignVR
             var match = HandPoseCoach.Match(current, (SimulatedHandPoseProvider.DemoPose)lessonIndex);
             if (current.tracked && match >= .78f) CompleteLesson(match);
             else { mistakes++; feedbackText.text = current.tracked ? PoseHint(lessonIndex) : "Your hand needs to be visible first."; }
+            if (!current.tracked || match < .78f) tutor?.CoachCorrection();
         }
 
         void CompleteLesson(float match)

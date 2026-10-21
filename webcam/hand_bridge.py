@@ -7,7 +7,9 @@ import base64
 from collections import deque
 import json
 import math
+import re
 import socket
+import subprocess
 import time
 from pathlib import Path
 
@@ -224,6 +226,32 @@ def read_camera_frame(camera, on_missing, *, video=False, max_failures=30, retry
     raise RuntimeError("Camera stopped providing frames. Reconnect it and restart webcam tracking.")
 
 
+def discover_mac_camera_index() -> int:
+    """Prefer the built-in FaceTime camera over Continuity Camera/iPhone devices."""
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-f", "avfoundation", "-list_devices", "true", "-i", ""],
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return 0
+    candidates = []
+    for line in (result.stdout + "\n" + result.stderr).splitlines():
+        match = re.search(r"\[(\d+)\]\s*(.+)$", line)
+        if not match:
+            continue
+        name = match.group(2).strip().lower()
+        if any(word in name for word in ("iphone", "ipad", "continuity", "desk view")):
+            continue
+        score = 0
+        if "facetime" in name:
+            score += 4
+        if "built-in" in name or "mac" in name or "isight" in name:
+            score += 3
+        candidates.append((score, int(match.group(1))))
+    return max(candidates, default=(0, 0))[1]
+
+
 def open_camera(preferred: int):
     """Open the preferred Mac camera, falling back to another connected index."""
     indices = [preferred] + [index for index in range(4) if index != preferred]
@@ -289,7 +317,8 @@ def choose_recognition(sequence_result, alphabet_result):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--camera", type=int, default=0)
+    parser.add_argument("--camera", default="mac",
+                        help="Camera index, or 'mac' to prefer the built-in FaceTime camera")
     parser.add_argument("--video", type=Path, help="Use a video file instead of the live camera")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=5055)
@@ -305,7 +334,15 @@ def main() -> None:
                         "ml/team_sasl/sasl_labels.json")
     args = parser.parse_args()
 
-    camera = cv2.VideoCapture(str(args.video)) if args.video else open_camera(args.camera)
+    if args.video:
+        camera_index = None
+    elif str(args.camera).lower() in {"mac", "builtin", "built-in", "auto"}:
+        camera_index = discover_mac_camera_index()
+    else:
+        camera_index = int(args.camera)
+    camera = cv2.VideoCapture(str(args.video)) if args.video else open_camera(camera_index)
+    if not args.video:
+        print(f"Using Mac camera index {camera_index} (built-in preference)", flush=True)
     if camera is None or not camera.isOpened():
         raise SystemExit("Could not open the webcam. Check macOS Camera permission for Terminal/Codex.")
 
@@ -349,7 +386,7 @@ def main() -> None:
                         raise
                     camera.release()
                     time.sleep(1.0)
-                    camera = open_camera(args.camera)
+                    camera = open_camera(camera_index)
                     if camera is None:
                         continue
                     configure_camera(camera)

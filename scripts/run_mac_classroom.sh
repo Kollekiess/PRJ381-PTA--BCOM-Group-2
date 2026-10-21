@@ -20,7 +20,7 @@ fi
 if [[ -x "$PROJECT_ROOT/.venv/bin/python" ]] && ! pgrep -f "webcam/hand_bridge.py" >/dev/null 2>&1; then
   (
     while true; do
-      if "$PROJECT_ROOT/.venv/bin/python" "$PROJECT_ROOT/webcam/hand_bridge.py" --no-preview >>/tmp/bcsignvr-webcam.log 2>&1; then
+      if "$PROJECT_ROOT/.venv/bin/python" "$PROJECT_ROOT/webcam/hand_bridge.py" --camera mac --no-preview >>/tmp/bcsignvr-webcam.log 2>&1; then
         break
       else
         status=$?

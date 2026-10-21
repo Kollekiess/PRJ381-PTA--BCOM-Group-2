@@ -25,11 +25,18 @@ namespace BCSignVR
         Transform rightArm;
         Transform leftBrow, rightBrow;
         float encouragement;
+        float coaching;
         TextMesh speech;
         float nextTipAt;
         string lastTip;
 
         public void Encourage() => encouragement = 2.5f;
+
+        /// <summary>Give Bob a visible, gentle correction reaction.</summary>
+        public void CoachCorrection() { coaching = 1.35f; encouragement = 0; }
+
+        /// <summary>Bob leans in while waiting for the learner's hand.</summary>
+        public void CoachWaiting() { coaching = .85f; }
 
         public void Say(string message, bool immediate = false)
         {
@@ -213,14 +220,16 @@ namespace BCSignVR
             // Tiny gestures keep the guide alive without distracting from the signing lesson.
             var time = Time.time;
             encouragement = Mathf.Max(0, encouragement - Time.deltaTime);
+            coaching = Mathf.Max(0, coaching - Time.deltaTime);
             var pleased = encouragement > 0;
-            leftBrow.localRotation = Quaternion.Euler(0, 0, pleased ? 5 : -16);
-            rightBrow.localRotation = Quaternion.Euler(0, 0, pleased ? -5 : 16);
+            var coachingNow = coaching > 0 && !pleased;
+            leftBrow.localRotation = Quaternion.Euler(0, 0, pleased ? 5 : coachingNow ? -8 : -16);
+            rightBrow.localRotation = Quaternion.Euler(0, 0, pleased ? -5 : coachingNow ? 8 : 16);
             head.localRotation = Quaternion.Euler(Mathf.Sin(time * .65f) * 1.2f, Mathf.Sin(time * .43f) * 2f,
-                Mathf.Sin(time * .55f) * 1.8f);
+                Mathf.Sin(time * .55f) * 1.8f + (coachingNow ? Mathf.Sin(time * 3f) * 3.5f : 0));
             if (pleased) head.localRotation *= Quaternion.Euler(Mathf.Sin(time * 5f) * 5f, 0, 0);
-            leftArm.localRotation = Quaternion.Euler(0f, 0f, Mathf.Sin(time * .8f) * 1.5f);
-            rightArm.localRotation = Quaternion.Euler(0f, 0f, -Mathf.Sin(time * .8f) * 1.5f);
+            leftArm.localRotation = Quaternion.Euler(0f, 0f, Mathf.Sin(time * .8f) * 1.5f + (coachingNow ? 8f : 0));
+            rightArm.localRotation = Quaternion.Euler(0f, 0f, -Mathf.Sin(time * .8f) * 1.5f + (pleased ? -16f : 0));
             var blink = Mathf.Repeat(time, 4.8f);
             var eyeHeight = blink < .16f ? Mathf.Lerp(.12f, 1f, Mathf.Abs(blink - .08f) / .08f) : 1f;
             leftEye.localScale = rightEye.localScale = new Vector3(1f, eyeHeight, 1f);

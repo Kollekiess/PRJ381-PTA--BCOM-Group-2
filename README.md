@@ -51,7 +51,11 @@ For the built app, double-click **Open Classroom.command**. It starts the local 
 
 Run `./scripts/setup_webcam.sh` once. After that, `./scripts/run_mac_simulator.sh` starts the camera tracker automatically. Allow Camera access when macOS asks. The board status changes to `LIVE MAC CAMERA HAND` while a hand is visible; no camera frames are uploaded or saved unless recording is explicitly requested.
 
-To diagnose the camera without opening Unity, run:
+The classroom launcher passes `--camera mac`, which prefers the built-in
+FaceTime/Mac camera when macOS also exposes an iPhone or Continuity Camera.
+To force a known device index manually, use `--camera 1` (or another index)
+when running the bridge directly. To diagnose the camera without opening
+Unity, run:
 
 ```bash
 .venv/bin/python -c 'import cv2; c=cv2.VideoCapture(0); ok,f=c.read(); print({"camera_open":c.isOpened(),"frame_received":ok,"size":None if f is None else [f.shape[1],f.shape[0]]}); c.release()'
