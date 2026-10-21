@@ -135,6 +135,7 @@ namespace BCSignVR
         }
         public void Focus(bool value)
         {
+            if (!this || !gameObject || !transform) return;
             selected = value;
             if (face != null) face.material.color = value ? Color.Lerp(normal, ClassroomUi.Blue, .22f) : normal;
             transform.localScale = value ? new Vector3(1.025f, 1.025f, 1) : Vector3.one;
@@ -157,7 +158,7 @@ namespace BCSignVR
             var ray = vr ? new Ray(transform.position, transform.forward) : camera.ScreenPointToRay(Input.mousePosition);
             BoardButton next = null;
             if (Physics.Raycast(ray, out var hit, 20f)) next = hit.collider.GetComponent<BoardButton>();
-            if (next != focused) { focused?.Focus(false); focused = next; focused?.Focus(true); }
+            if (next != focused) { if (focused) focused.Focus(false); focused = next; if (focused) focused.Focus(true); }
             if (Input.GetKeyDown(KeyCode.Tab))
             {
                 var buttons = FindObjectsByType<BoardButton>(FindObjectsSortMode.InstanceID);
@@ -170,8 +171,8 @@ namespace BCSignVR
                         var row = Mathf.Abs(aPoint.y - bPoint.y) > 24f ? bPoint.y.CompareTo(aPoint.y) : 0;
                         return row != 0 ? row : aPoint.x.CompareTo(bPoint.x);
                     });
-                    keyboardFocus?.Focus(false); selectedIndex = (selectedIndex + 1) % buttons.Length;
-                    keyboardFocus = buttons[selectedIndex]; keyboardFocus.Focus(true);
+                    if (keyboardFocus) keyboardFocus.Focus(false); selectedIndex = (selectedIndex + 1) % buttons.Length;
+                    keyboardFocus = buttons[selectedIndex]; if (keyboardFocus) keyboardFocus.Focus(true);
                 }
             }
             var pressed = false;
@@ -186,8 +187,8 @@ namespace BCSignVR
                     hand.rightHand.GetJoint(UnityEngine.XR.Hands.XRHandJointID.IndexTip).TryGetPose(out var index))
                     pressed |= Vector3.Distance(thumb.position, index.position) < .023f;
             }
-            if (Input.GetMouseButtonDown(0) || pressed && !wasPressed) focused?.Press();
-            if (Input.GetKeyDown(KeyCode.Return)) (keyboardFocus != null ? keyboardFocus : focused)?.Press();
+            if (Input.GetMouseButtonDown(0) || pressed && !wasPressed) { if (focused) focused.Press(); }
+            if (Input.GetKeyDown(KeyCode.Return)) { var target = keyboardFocus ? keyboardFocus : focused; if (target) target.Press(); }
             wasPressed = pressed;
         }
     }
