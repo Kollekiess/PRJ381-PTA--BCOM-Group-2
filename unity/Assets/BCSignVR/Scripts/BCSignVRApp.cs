@@ -46,6 +46,7 @@ namespace BCSignVR
         float lessonStarted, matchHeld, replayStarted;
         bool lessonCompleted, syncing, savingFailed;
         float successDeadline;
+        float successMatch;
         string token, saveStatus = "Saved on this Mac";
         bool apiConnected;
         bool remoteProgressLoaded;
@@ -163,7 +164,9 @@ namespace BCSignVR
             var learner = ClassroomUi.Panel("Learner camera hand", content, new Vector3(1.67f, -.69f, 0),
                 new Vector2(2.83f, 1.52f), new Color(.95f, .98f, .97f), .16f, true).transform;
             ClassroomUi.Label("BOB'S EXAMPLE  /  RIGHT HAND", example, -1.17f, .51f, .105f, ClassroomUi.DeepBlue, maxWidth: 2.55f);
-            ClassroomUi.FontLabel(letter, "NIDSASLFingerspell-Regular", example, 0, -.05f, 1.98f, ClassroomUi.Ink);
+            // The reference font is a hand illustration, not a normal glyph. Keep
+            // it inside the example card so every A–Z pose is readable at once.
+            ClassroomUi.FontLabel(letter, "NIDSASLFingerspell-Regular", example, 0, -.10f, 1.08f, ClassroomUi.Ink);
             trackingText = ClassroomUi.Label("LIVE WEBCAM  /  RIGHT HAND", learner, -1.17f, .51f, .105f, ClassroomUi.Green, maxWidth: 2.55f);
             webcamPreview = new WebcamPreviewView("Alphabet webcam preview", learner, new Vector3(0, -.16f, -.045f), new Vector2(2.56f, .88f));
             liveView = new HandSkeletonView("Alphabet learner hand", content, new Color(.22f, .65f, .55f), true);
@@ -609,10 +612,12 @@ namespace BCSignVR
         void CompleteLesson(float match)
         {
             if (lessonCompleted || preview) return;
-            lessonCompleted = true; sessionScores.Add(match);
+            lessonCompleted = true; successMatch = Mathf.Clamp01(match); sessionScores.Add(successMatch);
             tutor?.Encourage();
             tutor?.Say("You got it! Choose the next lesson, or try that sign again.", true);
-            feedbackText.text = inputMode == InputMode.Demo ? "Correct! Your demo sign matches." : "Correct! Bob matched your sign.";
+            feedbackText.text = inputMode == InputMode.Demo
+                ? $"Correct! Your demo sign matches  /  accuracy {successMatch:P0}."
+                : $"Correct! Bob matched your sign  /  accuracy {successMatch:P0}.";
             feedbackText.color = ClassroomUi.Green.linear;
             var label = nextButton.GetComponentInChildren<TextMesh>(); label.text = lessonIndex == 2 ? "See results  >" : "Continue  >";
             try
@@ -640,7 +645,7 @@ namespace BCSignVR
                 new Vector2(4.75f, 2.08f), new Color(.98f, 1f, .99f), .22f, true).transform;
             ClassroomUi.Label("SIGN CORRECT!", successPrompt, 0, .67f, .25f, ClassroomUi.Green,
                 TextAnchor.MiddleCenter);
-            ClassroomUi.Label("Bob says: nice work — you matched the handshape.", successPrompt, 0, .34f, .13f,
+            ClassroomUi.Label($"Bob says: nice work — accuracy {successMatch:P0}.", successPrompt, 0, .34f, .13f,
                 ClassroomUi.Ink, TextAnchor.MiddleCenter, 4.2f);
             var nextPromptButton = ClassroomUi.Button("Next lesson  (15)", successPrompt, -1.10f, -.55f, 1.95f,
                 AdvanceAfterSuccess, true, .38f);
@@ -652,6 +657,16 @@ namespace BCSignVR
         void UpdateSuccessPrompt()
         {
             if (successPrompt == null) return;
+            if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.N) || Input.GetKeyDown(KeyCode.Space))
+            {
+                AdvanceAfterSuccess();
+                return;
+            }
+            if (Input.GetKeyDown(KeyCode.R))
+            {
+                RetryAfterSuccess();
+                return;
+            }
             var remaining = Mathf.Max(0, Mathf.CeilToInt(successDeadline - Time.time));
             successCountdown.text = remaining > 0 ? $"Next lesson  ({remaining})" : "Opening…";
             if (remaining <= 0) AdvanceAfterSuccess();
@@ -926,6 +941,12 @@ namespace BCSignVR
             else if (scenario == "reference") ShowResearchPractice(0);
             else if (scenario == "input") CycleMode();
             else if (scenario == "alphabet") ShowAlphabet(0);
+            else if (scenario.StartsWith("alphabet-", StringComparison.OrdinalIgnoreCase))
+            {
+                var suffix = scenario.Substring("alphabet-".Length);
+                var index = !string.IsNullOrEmpty(suffix) ? suffix[0] - 'a' : 0;
+                ShowAlphabet(Mathf.Clamp(index, 0, 25));
+            }
             else if (scenario == "greeting") ShowGreeting();
             else if (scenario == "fingerspell") ShowFingerspell("HELLO");
             else if (scenario == "success") ShowSuccessPreview();
@@ -941,6 +962,7 @@ namespace BCSignVR
             inputMode = InputMode.Demo;
             StartWarmup();
             lessonCompleted = true;
+            successMatch = 1f;
             feedbackText.text = "Correct! Bob matched your sign.";
             feedbackText.color = ClassroomUi.Green.linear;
             ShowSuccessPrompt();

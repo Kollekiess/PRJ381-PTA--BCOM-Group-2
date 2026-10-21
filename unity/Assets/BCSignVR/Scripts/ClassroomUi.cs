@@ -128,6 +128,7 @@ namespace BCSignVR
         Color normal;
         Renderer face;
         bool selected;
+        float lastPressedAt = -10f;
         public void Initialize(Action callback, bool primary, TextMesh label)
         {
             action = callback; normal = primary ? ClassroomUi.Blue : Color.white;
@@ -140,7 +141,16 @@ namespace BCSignVR
             if (face != null) face.material.color = value ? Color.Lerp(normal, ClassroomUi.Blue, .22f) : normal;
             transform.localScale = value ? new Vector3(1.025f, 1.025f, 1) : Vector3.one;
         }
-        public void Press() { if (isActiveAndEnabled) action?.Invoke(); }
+        public void Press()
+        {
+            if (!isActiveAndEnabled || action == null || Time.unscaledTime - lastPressedAt < .12f) return;
+            lastPressedAt = Time.unscaledTime;
+            action.Invoke();
+        }
+        // Desktop builds also receive Unity's native collider click. Keeping this
+        // path alongside BoardPointer makes the classroom usable when the cursor
+        // is over a modal button, while Press's debounce prevents double actions.
+        void OnMouseDown() => Press();
         void OnDisable() { if (selected) Focus(false); }
     }
 
