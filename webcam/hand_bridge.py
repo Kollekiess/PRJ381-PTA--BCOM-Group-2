@@ -362,9 +362,24 @@ def main() -> None:
     if alphabet_recognizer.weights is None:
         alphabet_recognizer = AlphabetTemplateRecognizer(args.alphabet_model)
 
-    def tracking_lost():
+    def preview_jpeg(frame):
+        """Return a small local-only preview that is safe for a UDP packet."""
+        nonlocal preview_frame
+        if frame is None:
+            return ""
+        preview_frame += 1
+        if preview_frame % 3 != 0:
+            return ""
+        thumbnail = cv2.resize(frame, (160, 90), interpolation=cv2.INTER_AREA)
+        encoded, buffer = cv2.imencode(".jpg", thumbnail,
+                                       [int(cv2.IMWRITE_JPEG_QUALITY), 35])
+        return base64.b64encode(buffer.tobytes()).decode("ascii") if encoded and len(buffer) <= 6000 else ""
+
+    def tracking_lost(frame=None):
         recognizer.reset()
-        sender.sendto(b'{"version":1,"tracked":false,"recognized":"UNKNOWN","confidence":0}',
+        packet = {"version": 1, "tracked": False, "recognized": "UNKNOWN", "confidence": 0,
+                  "previewJpeg": preview_jpeg(frame)}
+        sender.sendto(json.dumps(packet, separators=(",", ":")).encode("utf-8"),
                       (args.host, args.port))
 
     try:
@@ -410,15 +425,7 @@ def main() -> None:
                     # A small, local-only preview lets the learner see the real
                     # webcam movement in the board's second card. It is not
                     # written to recordings and stays on 127.0.0.1.
-                    preview_frame += 1
-                    if preview_frame % 3 == 0:
-                        thumbnail = cv2.resize(frame, (160, 90), interpolation=cv2.INTER_AREA)
-                        encoded, buffer = cv2.imencode(".jpg", thumbnail,
-                                                       [int(cv2.IMWRITE_JPEG_QUALITY), 35])
-                        # Keep the complete UDP datagram below macOS's safe
-                        # payload size even on a detailed classroom background.
-                        if encoded and len(buffer) <= 6000:
-                            packet["previewJpeg"] = base64.b64encode(buffer.tobytes()).decode("ascii")
+                    packet["previewJpeg"] = preview_jpeg(frame)
                     # Keep legacy primary-hand fields for Unity, while retaining
                     # every detected hand in recordings for two-handed SASL signs.
                     packet["hands"] = packet_hands(result.multi_hand_landmarks, labels)
@@ -431,7 +438,7 @@ def main() -> None:
                     cv2.putText(frame, f"{recognized.replace('_', ' ')}  {confidence:.0%}",
                                 (20, 76), cv2.FONT_HERSHEY_SIMPLEX, .65, (255, 255, 255), 2)
                 else:
-                    tracking_lost()
+                    tracking_lost(frame)
 
                 if not args.no_preview:
                     cv2.putText(frame, "BC Sign VR - press Q to close camera", (20, 38),

@@ -65,6 +65,11 @@ namespace BCSignVR
             Packet packet;
             DateTime received;
             lock (sync) { packet = latest; received = latestAt; }
+            // Keep the live camera card visible during tracking loss. A blank
+            // card should mean the camera is unavailable, not simply that the
+            // learner has moved their hand out of frame.
+            if (packet != null && !string.IsNullOrEmpty(packet.previewJpeg))
+                PreviewJpeg = packet.previewJpeg;
             if (packet == null || packet.version != 1 || !packet.tracked || packet.landmarks == null || packet.landmarks.Length != 21 ||
                 (DateTime.UtcNow - received).TotalSeconds > .45)
                 return false;

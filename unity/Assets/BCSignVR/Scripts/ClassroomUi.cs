@@ -151,6 +151,7 @@ namespace BCSignVR
         // path alongside BoardPointer makes the classroom usable when the cursor
         // is over a modal button, while Press's debounce prevents double actions.
         void OnMouseDown() => Press();
+        void OnMouseUpAsButton() => Press();
         void OnDisable() { if (selected) Focus(false); }
     }
 
@@ -167,7 +168,16 @@ namespace BCSignVR
             var vr = XRSettings.isDeviceActive;
             var ray = vr ? new Ray(transform.position, transform.forward) : camera.ScreenPointToRay(Input.mousePosition);
             BoardButton next = null;
-            if (Physics.Raycast(ray, out var hit, 20f)) next = hit.collider.GetComponent<BoardButton>();
+            // Decorative card meshes can be in front of a button. Search all
+            // hits and pick the nearest button collider instead of assuming the
+            // first hit is interactive.
+            var hits = Physics.RaycastAll(ray, 20f);
+            Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+            foreach (var hit in hits)
+            {
+                next = hit.collider.GetComponentInParent<BoardButton>();
+                if (next) break;
+            }
             if (next != focused) { if (focused) focused.Focus(false); focused = next; if (focused) focused.Focus(true); }
             if (Input.GetKeyDown(KeyCode.Tab))
             {
@@ -197,9 +207,50 @@ namespace BCSignVR
                     hand.rightHand.GetJoint(UnityEngine.XR.Hands.XRHandJointID.IndexTip).TryGetPose(out var index))
                     pressed |= Vector3.Distance(thumb.position, index.position) < .023f;
             }
-            if (Input.GetMouseButtonDown(0) || pressed && !wasPressed) { if (focused) focused.Press(); }
+            if (Input.GetMouseButtonDown(0))
+            {
+                var target = focused ?? ButtonAtScreenPoint(camera, Input.mousePosition);
+                if (target) target.Press();
+            }
+            if (pressed && !wasPressed && focused) focused.Press();
             if (Input.GetKeyDown(KeyCode.Return)) { var target = keyboardFocus ? keyboardFocus : focused; if (target) target.Press(); }
             wasPressed = pressed;
+        }
+
+        // Some macOS window configurations deliver the native mouse event to
+        // Unity's IMGUI loop but do not populate Input.mousePosition. Mirror the
+        // click through that path so desktop buttons remain usable in a window.
+        void OnGUI()
+        {
+            var evt = Event.current;
+            if (evt == null || evt.type != EventType.MouseDown || evt.button != 0) return;
+            var camera = GetComponent<Camera>();
+            if (!camera) return;
+            var screenPoint = new Vector3(evt.mousePosition.x, Screen.height - evt.mousePosition.y);
+            var button = ButtonAtScreenPoint(camera, screenPoint);
+            if (button)
+            {
+                button.Press();
+                evt.Use();
+            }
+        }
+
+        static BoardButton ButtonAtScreenPoint(Camera camera, Vector3 point)
+        {
+            var buttons = FindObjectsByType<BoardButton>(FindObjectsSortMode.None);
+            foreach (var button in buttons)
+            {
+                if (!button || !button.isActiveAndEnabled) continue;
+                var collider = button.GetComponent<Collider>();
+                if (!collider) continue;
+                var bounds = collider.bounds;
+                var min = camera.WorldToScreenPoint(bounds.min);
+                var max = camera.WorldToScreenPoint(bounds.max);
+                var rect = Rect.MinMaxRect(Mathf.Min(min.x, max.x), Mathf.Min(min.y, max.y),
+                    Mathf.Max(min.x, max.x), Mathf.Max(min.y, max.y));
+                if (rect.Contains(point)) return button;
+            }
+            return null;
         }
     }
 }
