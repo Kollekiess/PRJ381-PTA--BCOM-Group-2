@@ -33,6 +33,8 @@ namespace BCSignVR
         Transform board;
         Transform content;
         TextMesh connectionText, feedbackText, detailsText, matchText, trackingText, demoPoseText;
+        TextMesh successCountdown;
+        Transform successPrompt;
         Transform progressFill;
         BoardButton nextButton;
         HandSkeletonView targetView, liveView;
@@ -42,6 +44,7 @@ namespace BCSignVR
         int lessonIndex, mistakes;
         float lessonStarted, matchHeld, replayStarted;
         bool lessonCompleted, syncing, savingFailed;
+        float successDeadline;
         string token, saveStatus = "Saved on this Mac";
         bool apiConnected;
         bool remoteProgressLoaded;
@@ -109,6 +112,7 @@ namespace BCSignVR
             content = new GameObject(next.ToString()).transform; content.SetParent(board, false);
             content.localPosition = new Vector3(0, 0, -.10f);
             targetView = null; liveView = null; feedbackText = detailsText = matchText = trackingText = demoPoseText = null;
+            successCountdown = null; successPrompt = null;
             progressFill = null; nextButton = null;
             matchHeld = 0;
         }
@@ -508,6 +512,7 @@ namespace BCSignVR
             if (page == Page.Basics) { UpdateBasics(); return; }
             if (page == Page.Fingerspell) { UpdateFingerspell(); return; }
             if (page == Page.SaslPractice) { UpdateResearchPractice(); return; }
+            if (page == Page.Practice && lessonCompleted) { UpdateSuccessPrompt(); return; }
             if (page != Page.Practice) return;
             if (inputMode == InputMode.Demo)
             {
@@ -594,8 +599,8 @@ namespace BCSignVR
             if (lessonCompleted || preview) return;
             lessonCompleted = true; sessionScores.Add(match);
             tutor?.Encourage();
-            tutor?.Say("Nicely done! Choose Continue when you're ready.", true);
-            feedbackText.text = inputMode == InputMode.Demo ? "Nice! Demo exercise complete." : "Well done! Exercise complete.";
+            tutor?.Say("You got it! Choose the next lesson, or try that sign again.", true);
+            feedbackText.text = inputMode == InputMode.Demo ? "Correct! Your demo sign matches." : "Correct! Bob matched your sign.";
             feedbackText.color = ClassroomUi.Green.linear;
             var label = nextButton.GetComponentInChildren<TextMesh>(); label.text = lessonIndex == 2 ? "See results  >" : "Continue  >";
             try
@@ -608,6 +613,46 @@ namespace BCSignVR
             }
             catch (Exception error) { savingFailed = true; saveStatus = "Could not save on this Mac"; Debug.LogWarning(error.Message); }
             UpdateConnectionLabel();
+            ShowSuccessPrompt();
+        }
+
+        void ShowSuccessPrompt()
+        {
+            if (successPrompt != null || content == null) return;
+            successDeadline = Time.time + 15f;
+            successPrompt = ClassroomUi.Panel("Correct sign prompt", content, new Vector3(0, -.42f, -.24f),
+                new Vector2(4.75f, 2.08f), new Color(.98f, 1f, .99f), .22f, true).transform;
+            ClassroomUi.Label("SIGN CORRECT!", successPrompt, 0, .67f, .25f, ClassroomUi.Green,
+                TextAnchor.MiddleCenter);
+            ClassroomUi.Label("Bob says: nice work — you matched the handshape.", successPrompt, 0, .34f, .13f,
+                ClassroomUi.Ink, TextAnchor.MiddleCenter, 4.2f);
+            var nextPromptButton = ClassroomUi.Button("Next lesson  (15)", successPrompt, -1.10f, -.55f, 1.95f,
+                AdvanceAfterSuccess, true, .38f);
+            successCountdown = nextPromptButton.GetComponentInChildren<TextMesh>();
+            ClassroomUi.Button("Try again", successPrompt, 1.10f, -.55f, 1.65f,
+                RetryAfterSuccess, false, .38f);
+        }
+
+        void UpdateSuccessPrompt()
+        {
+            if (successPrompt == null) return;
+            var remaining = Mathf.Max(0, Mathf.CeilToInt(successDeadline - Time.time));
+            successCountdown.text = remaining > 0 ? $"Next lesson  ({remaining})" : "Opening…";
+            if (remaining <= 0) AdvanceAfterSuccess();
+        }
+
+        void AdvanceAfterSuccess()
+        {
+            if (successPrompt == null) return;
+            if (++lessonIndex >= 3) ShowResults(); else StartLesson();
+        }
+
+        void RetryAfterSuccess()
+        {
+            if (successPrompt == null) return;
+            if (sessionScores.Count > 0) sessionScores.RemoveAt(sessionScores.Count - 1);
+            StartLesson();
+            tutor?.Say("No problem. Let’s try that sign once more.", true);
         }
 
         void ShowResults()
