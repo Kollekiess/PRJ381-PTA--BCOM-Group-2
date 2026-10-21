@@ -28,7 +28,7 @@ cd backend
 python3 -m bcsignvr.server
 ```
 
-The API starts at `http://127.0.0.1:8787`. On first run it creates `backend/data/bcsignvr.sqlite3` and seeds three prototype lessons.
+The API starts at `http://127.0.0.1:8787`. On first run it creates `backend/data/bcsignvr.sqlite3` and seeds the alphabet, greeting, and reviewed-reference lesson catalog.
 
 Run its tests with:
 
@@ -75,6 +75,10 @@ To capture a complete demonstration for later SASL review, use:
 The recording contains landmarks only. Keep it outside Git until a fluent SASL
 reviewer has approved the label, signer consent and source; then follow the
 reviewed training steps in `ml/README.md`.
+
+Use [`docs/REVIEWED_CAPTURE_CHECKLIST.md`](docs/REVIEWED_CAPTURE_CHECKLIST.md)
+to prepare a small, traceable recording set before enabling word-level SASL
+recognition.
 
 ## Run as a simulated Meta Quest 3
 
