@@ -161,14 +161,14 @@ namespace BCSignVR
             trackingText = ClassroomUi.Label("LIVE WEBCAM  /  RIGHT HAND", learner, -1.17f, .51f, .105f, ClassroomUi.Green, maxWidth: 2.55f);
             webcamPreview = new WebcamPreviewView("Alphabet webcam preview", learner, new Vector3(0, -.16f, -.045f), new Vector2(2.56f, .88f));
             liveView = new HandSkeletonView("Alphabet learner hand", content, new Color(.22f, .65f, .55f), true);
-            alphabetStatus = ClassroomUi.Label("Show Bob your hand to begin.", content, -3.05f, -1.64f, .15f,
-                ClassroomUi.Ink, maxWidth: 6.1f);
+            alphabetStatus = ClassroomUi.Label("Show Bob your RIGHT hand to begin.", content, -3.05f, -1.64f, .15f,
+                ClassroomUi.Ink, maxWidth: 5.25f);
             ClassroomUi.Button("<  Previous", content, -2.42f, -2.08f, 1.35f,
                 () => ShowAlphabet(Mathf.Max(0, alphabetIndex - 1)), height: .35f);
             ClassroomUi.Button("Camera warm-up", content, -.67f, -2.08f, 1.65f, StartWarmup, height: .35f);
             ClassroomUi.Button(alphabetIndex == 25 ? "Finish alphabet" : "Practised  /  next  >", content,
                 1.75f, -2.08f, 2.15f, RecordAlphabetAndNext, true, .35f);
-            ClassroomUi.Label("Reference: National Institute for the Deaf", content, 3.05f, -1.72f, .09f,
+            ClassroomUi.Label("Reference: National Institute for the Deaf", content, 3.05f, -1.50f, .09f,
                 ClassroomUi.Muted, TextAnchor.MiddleRight, 3.0f);
         }
 
@@ -191,7 +191,7 @@ namespace BCSignVR
             else alphabetStatus.text = current.tracked
                 ? "Hand visible. Compare it with Bob's example, then choose Practised."
                 : inputMode == InputMode.Camera ? webcam.IsReceiving ? "Camera ready. Show your RIGHT hand to the webcam." :
-                "Camera is not sending frames yet. Allow Camera access, then keep this lesson open." : "Raise your hand in front of you.";
+                "Camera waiting. Allow Camera access to continue." : "Raise your RIGHT hand in front of you.";
         }
 
         void RecordAlphabetAndNext()
