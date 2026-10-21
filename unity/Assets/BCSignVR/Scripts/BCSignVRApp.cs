@@ -575,7 +575,7 @@ namespace BCSignVR
         // and are mirrored/normalised by MediaPipe before they reach Unity. Keep
         // the camera gate forgiving enough to complete a real lesson, while the
         // learner still has to hold a tracked hand in the target shape for 1.25s.
-        float PracticeThreshold() => inputMode == InputMode.Camera ? .60f : .78f;
+        float PracticeThreshold() => inputMode == InputMode.Camera ? .50f : .78f;
 
         float PracticeMatch() => HandPoseCoach.Match(current,
             (SimulatedHandPoseProvider.DemoPose)lessonIndex);
