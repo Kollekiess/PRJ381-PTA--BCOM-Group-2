@@ -531,8 +531,8 @@ namespace BCSignVR
             var angle = Mathf.Sin((Time.time - replayStarted) * .8f) * 12f;
             targetView.SetPose(target, content.TransformPoint(new Vector3(-1.67f, -1.18f, -.20f)), Quaternion.Euler(0, 180 + angle, 0), .92f);
             liveView.SetPose(current, content.TransformPoint(new Vector3(1.67f, -1.18f, -.20f)), Quaternion.Euler(0, 180, 0), .92f);
-            var match = HandPoseCoach.Match(current, (SimulatedHandPoseProvider.DemoPose)lessonIndex);
-            var correct = current.tracked && match >= .78f;
+            var match = PracticeMatch();
+            var correct = current.tracked && match >= PracticeThreshold();
             if (!lessonCompleted)
             {
                 matchHeld = correct ? matchHeld + Time.deltaTime : 0;
@@ -549,7 +549,9 @@ namespace BCSignVR
                     if (!correct) tutor?.CoachCorrection();
                     tutor?.Say(correct ? "Looking good! Hold it steady for a moment." : PoseHint(lessonIndex));
                     feedbackText.text = correct ? inputMode == InputMode.Demo ? "Ready! Choose Check hand." : "That's it! Hold your hand steady." : PoseHint(lessonIndex);
-                    matchText.text = $"{match:P0} match";
+                    matchText.text = inputMode == InputMode.Camera
+                        ? $"{match:P0} shape match  /  hold steady"
+                        : $"{match:P0} match";
                 }
             }
             trackingText.text = current.tracked ? inputMode == InputMode.Demo ? "YOUR DEMO HAND  /  RIGHT" : inputMode == InputMode.Camera ? WebcamHandLabel() : "YOUR VR HAND  /  RIGHT  /  LIVE" :
@@ -565,6 +567,15 @@ namespace BCSignVR
         }
 
         string PoseHint(int index) => HandPoseCoach.Hint(current, (SimulatedHandPoseProvider.DemoPose)index);
+
+        // The Mac webcam landmarks are noisier than the deterministic simulator
+        // and are mirrored/normalised by MediaPipe before they reach Unity. Keep
+        // the camera gate forgiving enough to complete a real lesson, while the
+        // learner still has to hold a tracked hand in the target shape for 1.25s.
+        float PracticeThreshold() => inputMode == InputMode.Camera ? .60f : .78f;
+
+        float PracticeMatch() => HandPoseCoach.Match(current,
+            (SimulatedHandPoseProvider.DemoPose)lessonIndex);
 
         string HandName()
         {
@@ -589,11 +600,10 @@ namespace BCSignVR
                 if (++lessonIndex >= 3) ShowResults(); else StartLesson();
                 return;
             }
-            var target = SimulatedHandPoseProvider.Template((SimulatedHandPoseProvider.DemoPose)lessonIndex);
-            var match = HandPoseCoach.Match(current, (SimulatedHandPoseProvider.DemoPose)lessonIndex);
-            if (current.tracked && match >= .78f) CompleteLesson(match);
+            var match = PracticeMatch();
+            if (current.tracked && match >= PracticeThreshold()) CompleteLesson(match);
             else { mistakes++; feedbackText.text = current.tracked ? PoseHint(lessonIndex) : "Your hand needs to be visible first."; }
-            if (!current.tracked || match < .78f) tutor?.CoachCorrection();
+            if (!current.tracked || match < PracticeThreshold()) tutor?.CoachCorrection();
         }
 
         void CompleteLesson(float match)
