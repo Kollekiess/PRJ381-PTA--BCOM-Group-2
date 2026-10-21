@@ -35,6 +35,7 @@ namespace BCSignVR
         TextMesh connectionText, feedbackText, detailsText, matchText, trackingText, demoPoseText;
         TextMesh successCountdown;
         Transform successPrompt;
+        Transform successModalRoot;
         Transform progressFill;
         BoardButton nextButton;
         HandSkeletonView targetView, liveView;
@@ -107,6 +108,7 @@ namespace BCSignVR
         {
             page = next;
             if (content != null) { content.gameObject.SetActive(false); Destroy(content.gameObject); }
+            if (successModalRoot != null) { Destroy(successModalRoot.gameObject); successModalRoot = null; }
             webcamPreview?.Dispose();
             webcamPreview = null;
             content = new GameObject(next.ToString()).transform; content.SetParent(board, false);
@@ -620,7 +622,11 @@ namespace BCSignVR
         {
             if (successPrompt != null || content == null) return;
             successDeadline = Time.time + 15f;
-            successPrompt = ClassroomUi.Panel("Correct sign prompt", content, new Vector3(0, -.42f, -.24f),
+            content.gameObject.SetActive(false);
+            successModalRoot = new GameObject("Success modal layer").transform;
+            successModalRoot.SetParent(board, false);
+            successModalRoot.localPosition = new Vector3(0, 0, -.72f);
+            successPrompt = ClassroomUi.Panel("Correct sign prompt", successModalRoot, new Vector3(0, -.42f, 0),
                 new Vector2(4.75f, 2.08f), new Color(.98f, 1f, .99f), .22f, true).transform;
             ClassroomUi.Label("SIGN CORRECT!", successPrompt, 0, .67f, .25f, ClassroomUi.Green,
                 TextAnchor.MiddleCenter);
@@ -912,11 +918,22 @@ namespace BCSignVR
             else if (scenario == "alphabet") ShowAlphabet(0);
             else if (scenario == "greeting") ShowGreeting();
             else if (scenario == "fingerspell") ShowFingerspell("HELLO");
+            else if (scenario == "success") ShowSuccessPreview();
             else if (scenario == "results")
             { inputMode = InputMode.Demo; sessionScores.AddRange(new[] { .96f, .93f, .98f }); saveStatus = "Demo preview"; ShowResults(); }
             yield return new WaitForSeconds(1.4f); yield return new WaitForEndOfFrame();
             ScreenCapture.CaptureScreenshot(path, 1);
             yield return new WaitForSeconds(.5f); Application.Quit();
+        }
+
+        void ShowSuccessPreview()
+        {
+            inputMode = InputMode.Demo;
+            StartWarmup();
+            lessonCompleted = true;
+            feedbackText.text = "Correct! Bob matched your sign.";
+            feedbackText.color = ClassroomUi.Green.linear;
+            ShowSuccessPrompt();
         }
 
         static UnityWebRequest Request(string url, string method, string json)
