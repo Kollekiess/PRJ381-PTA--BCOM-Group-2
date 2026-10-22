@@ -7,54 +7,140 @@ using UnityEngine.InputSystem;
 public class CardboardGazeController : MonoBehaviour
 {
     [Header("Gaze Settings")]
-    public float maxGazeDistance = 20.0f;
-    public float gazeHoldTime = 2.0f; // Time in seconds to hold gaze before clicking
+    public float maxGazeDistance = 30.0f;
+    public float gazeHoldTime = 1.5f;
 
-    [Header("UI Reticle")]
-    public Image gazeImage; // Radial Filled Image centered on screen
+    [Header("Reticle Visuals")]
+    public Image gazeProgressRing;
+    public Image gazeCenterDot;
+    public Canvas reticleCanvas;
+    public float defaultDistance = 1.6f;
+    public Color normalColor = new Color(1f, 1f, 1f, 0.65f);
+    public Color hoverColor = new Color(0.2f, 0.9f, 1f, 0.95f);
+    public Color triggerColor = new Color(0.3f, 1f, 0.4f, 1f);
+
+    [Header("Optional Crumb Spawner Trigger")]
+    public BreadcrumbSpawner breadcrumbSpawner;
 
     private float timer = 0f;
     private GameObject currentGazeObject;
-    private Camera mainCamera;
+    private ICardboardInteractable currentInteractable;
+    private Transform cameraTransform;
+
+    void Awake()
+    {
+        EnsureCameraReference();
+        EnsureReticleSetup();
+    }
 
     void Start()
     {
-        mainCamera = Camera.main;
-        if(gazeImage != null) gazeImage.fillAmount = 0f;
+        EnsureCameraReference();
+        if (breadcrumbSpawner == null)
+        {
+            breadcrumbSpawner = FindFirstObjectByType<BreadcrumbSpawner>();
+        }
+        ResetGaze();
+    }
+
+    void EnsureCameraReference()
+    {
+        if (cameraTransform == null)
+        {
+            if (Camera.main != null) cameraTransform = Camera.main.transform;
+            else
+            {
+                var camGo = GameObject.Find("Player Camera");
+                if (camGo != null) cameraTransform = camGo.transform;
+            }
+        }
+    }
+
+    void EnsureReticleSetup()
+    {
+        EnsureCameraReference();
+        if (cameraTransform == null) return;
+
+        var existingCanvas = cameraTransform.Find("CardboardReticleCanvas");
+        if (existingCanvas != null)
+        {
+            reticleCanvas = existingCanvas.GetComponent<Canvas>();
+            gazeProgressRing = existingCanvas.Find("ProgressRing")?.GetComponent<Image>();
+            gazeCenterDot = existingCanvas.Find("CenterDot")?.GetComponent<Image>();
+            return;
+        }
+
+        GameObject canvasGo = new GameObject("CardboardReticleCanvas");
+        canvasGo.transform.SetParent(cameraTransform, false);
+        canvasGo.transform.localPosition = new Vector3(0f, 0f, defaultDistance);
+        canvasGo.transform.localRotation = Quaternion.identity;
+        canvasGo.transform.localScale = Vector3.one * 0.0018f;
+
+        reticleCanvas = canvasGo.AddComponent<Canvas>();
+        reticleCanvas.renderMode = RenderMode.WorldSpace;
+        canvasGo.AddComponent<CanvasScaler>();
+
+        GameObject dotGo = new GameObject("CenterDot");
+        dotGo.transform.SetParent(canvasGo.transform, false);
+        var dotRt = dotGo.AddComponent<RectTransform>();
+        dotRt.sizeDelta = new Vector2(10f, 10f);
+        gazeCenterDot = dotGo.AddComponent<Image>();
+        gazeCenterDot.color = normalColor;
+
+        GameObject ringGo = new GameObject("ProgressRing");
+        ringGo.transform.SetParent(canvasGo.transform, false);
+        var ringRt = ringGo.AddComponent<RectTransform>();
+        ringRt.sizeDelta = new Vector2(36f, 36f);
+        gazeProgressRing = ringGo.AddComponent<Image>();
+        gazeProgressRing.type = Image.Type.Filled;
+        gazeProgressRing.fillMethod = Image.FillMethod.Radial360;
+        gazeProgressRing.fillOrigin = (int)Image.Origin360.Top;
+        gazeProgressRing.fillClockwise = true;
+        gazeProgressRing.fillAmount = 0f;
+        gazeProgressRing.color = hoverColor;
     }
 
     void Update()
     {
+        EnsureCameraReference();
         HandleGazeRaycast();
-        HandleScreenTap();
+        HandleTrigger();
     }
 
     void HandleGazeRaycast()
     {
-        Ray ray = new Ray(mainCamera.transform.position, mainCamera.transform.forward);
+        if (cameraTransform == null) return;
+
+        Ray ray = new Ray(cameraTransform.position, cameraTransform.forward);
         RaycastHit hit;
 
-        //Checking for 3D colliders or UI Elements
-        GameObject hitObject = DetectGazeTarget(ray, out hit);
+        GameObject hitObject = DetectInteractableTarget(ray, out hit);
 
-        if(hitObject != null)
+        if (hitObject != null)
         {
-            //If gazing at an object reset the timer
-            if(currentGazeObject != hitObject)
+            if (currentGazeObject != hitObject)
             {
+                if (currentInteractable != null) currentInteractable.OnGazeExit();
+
                 currentGazeObject = hitObject;
+                currentInteractable = currentGazeObject.GetComponent<ICardboardInteractable>();
+                if (currentInteractable == null) currentInteractable = currentGazeObject.GetComponentInParent<ICardboardInteractable>();
+
+                if (currentInteractable != null) currentInteractable.OnGazeEnter();
                 timer = 0f;
             }
 
-            //Incrament Timer
-            timer += Time.deltaTime;
+            timer += Time.unscaledDeltaTime;
 
-            //Checking for UI Gaze
-            if(gazeImage != null)  gazeImage.fillAmount = Mathf.Clamp01(timer / gazeHoldTime);
-
-            //Trigger click when timer completes
-            if(timer >= gazeHoldTime)
+            if (gazeProgressRing != null)
             {
+                gazeProgressRing.color = hoverColor;
+                gazeProgressRing.fillAmount = Mathf.Clamp01(timer / gazeHoldTime);
+            }
+
+            if (timer >= gazeHoldTime)
+            {
+                if (gazeProgressRing != null) gazeProgressRing.color = triggerColor;
                 ExecuteClick(currentGazeObject);
                 ResetGaze();
             }
@@ -65,81 +151,149 @@ public class CardboardGazeController : MonoBehaviour
         }
     }
 
-    void HandleScreenTap()
+    void HandleTrigger()
     {
-        bool isTapped = false;
-
-        //Checking Touch Screen or Mouse Click
-        if(Touchscreen.current != null && Touchscreen.current.primaryTouch.press.wasPressedThisFrame)
+        // When pause menu is open, mouse clicks are used directly for UI interaction
+        if (GameManager.Instance != null && GameManager.Instance.IsMenuOpen)
         {
-            isTapped = true;
-        }
-        else if(Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
-        {
-            isTapped = true;
+            return;
         }
 
-        if(isTapped && currentGazeObject != null)
+        bool isMouseClick = false;
+        if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
         {
-            ExecuteClick(currentGazeObject);
-            ResetGaze();
+            isMouseClick = true;
+        }
+#if ENABLE_LEGACY_INPUT_MANAGER
+        if (!isMouseClick && Input.GetMouseButtonDown(0))
+        {
+            isMouseClick = true;
+        }
+#endif
+
+        bool isTriggered = false;
+
+        if (CardboardManager.Instance != null)
+        {
+            isTriggered = CardboardManager.Instance.IsTriggerPressedThisFrame();
+        }
+        else
+        {
+            if (Touchscreen.current != null && Touchscreen.current.primaryTouch.press.wasPressedThisFrame) isTriggered = true;
+            else if (isMouseClick) isTriggered = true;
+        }
+
+        if (isTriggered)
+        {
+            if (currentGazeObject != null)
+            {
+                ExecuteClick(currentGazeObject);
+                ResetGaze();
+            }
+            else
+            {
+                // Bread is only spawned in via mouse click (or VR controller trigger / touch tap)
+                // NEVER via keyboard keys (Space, Enter, etc.)
+                bool isValidBreadTrigger = isMouseClick;
+                if (!isValidBreadTrigger && CardboardManager.Instance != null)
+                {
+                    isValidBreadTrigger = CardboardManager.Instance.IsControllerOrTouchTriggerPressedThisFrame();
+                }
+
+                if (isValidBreadTrigger && breadcrumbSpawner != null)
+                {
+                    breadcrumbSpawner.TossBreadcrumb();
+                }
+            }
         }
     }
 
-    GameObject DetectGazeTarget(Ray ray, out RaycastHit hit)
+    GameObject DetectInteractableTarget(Ray ray, out RaycastHit hit)
     {
         hit = default;
-        
-        //Checking for UI that uses the graphic raycaster
-        PointerEventData pointerData = new PointerEventData(EventSystem.current);
-        pointerData.position = new Vector2(Screen.width / 2f, Screen.height / 2f);
 
-        List<RaycastResult> results = new List<RaycastResult>();
-
-        if(EventSystem.current != null)
+        // 1. UI Buttons
+        if (EventSystem.current != null)
         {
+            PointerEventData pointerData = new PointerEventData(EventSystem.current);
+            pointerData.position = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
+
+            List<RaycastResult> results = new List<RaycastResult>();
             EventSystem.current.RaycastAll(pointerData, results);
 
-            foreach(RaycastResult result in results)
+            foreach (var result in results)
             {
-                //Check for interaction capability
-                if(result.gameObject.GetComponent<Button>() != null || result.gameObject.GetComponentInParent<Button>() != null)
+                if (result.gameObject == null) continue;
+                if (reticleCanvas != null && result.gameObject.transform.IsChildOf(reticleCanvas.transform)) continue;
+
+                if (result.gameObject.GetComponent<Button>() != null || result.gameObject.GetComponentInParent<Button>() != null)
                 {
-                    hit = new RaycastHit(); // Placeholder for UI hits
+                    hit = new RaycastHit();
                     return result.gameObject;
                 }
             }
         }
 
-        //Checking for 3D physics objects
-        if(Physics.Raycast(ray, out hit, maxGazeDistance)) return hit.collider.gameObject;
+        // 2. Physics 3D Colliders
+        if (Physics.Raycast(ray, out hit, maxGazeDistance))
+        {
+            GameObject obj = hit.collider.gameObject;
+
+            if (obj.GetComponent<ICardboardInteractable>() != null || 
+                obj.GetComponentInParent<ICardboardInteractable>() != null ||
+                obj.GetComponent<TeacherInteraction>() != null ||
+                obj.GetComponentInParent<TeacherInteraction>() != null ||
+                
+                obj.name.Contains("Button") ||
+                false)
+            {
+                return obj;
+            }
+        }
 
         return null;
     }
 
     void ExecuteClick(GameObject target)
     {
-        //Trigger UI Button click event
-        Button button = target.GetComponent<Button>();
+        if (target == null) return;
 
-        if(button == null) button = target.GetComponentInParent<Button>();
-
-        if(button != null && button.interactable)
+        // UI Button
+        Button button = target.GetComponent<Button>() ?? target.GetComponentInParent<Button>();
+        if (button != null && button.interactable)
         {
             button.onClick.Invoke();
-            Debug.Log("Gaze Triggered UI Button: " + button.gameObject.name);
+            Debug.Log("[Cardboard Gaze] Clicked UI Button: " + button.gameObject.name);
+            return;
         }
-        else
+
+        // ICardboardInteractable
+        var interactable = target.GetComponent<ICardboardInteractable>() ?? target.GetComponentInParent<ICardboardInteractable>();
+        if (interactable != null)
         {
-            // Alternative: Send a custom message to 3D objects
-            target.SendMessage("OnGazeTrigger", SendMessageOptions.DontRequireReceiver);
+            interactable.OnGazeTrigger();
+            Debug.Log("[Cardboard Gaze] Triggered ICardboardInteractable on: " + target.name);
+            return;
         }
+
+        target.SendMessage("OnGazeTrigger", SendMessageOptions.DontRequireReceiver);
     }
 
     void ResetGaze()
     {
+        if (currentInteractable != null)
+        {
+            currentInteractable.OnGazeExit();
+            currentInteractable = null;
+        }
+
         currentGazeObject = null;
         timer = 0f;
-        if(gazeImage != null) gazeImage.fillAmount = 0f;
+
+        if (gazeProgressRing != null)
+        {
+            gazeProgressRing.fillAmount = 0f;
+            gazeProgressRing.color = normalColor;
+        }
     }
 }

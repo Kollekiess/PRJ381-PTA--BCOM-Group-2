@@ -4,67 +4,98 @@ using UnityEngine.SceneManagement;
 using UnityEngine.InputSystem;
 using TMPro;
 
+/// <summary>
+/// Controls the pause/main menu, level restart, VR calibration,
+/// and exit confirmation popup workflow.
+/// </summary>
 public class GameManager : MonoBehaviour
 {
-   [Header("UI Panels")]
-   public GameObject menuPanel;
-   public GameObject exitConfirmationPanel;
+    public static GameManager Instance { get; private set; }
 
-   [Header("UI Elements")]
-   public TextMeshProUGUI levelNumberText;
+    [Header("UI Panels")]
+    public GameObject menuPanel;
+    public GameObject exitConfirmationPanel;
 
-   [Header("Settings")]
-   public KeyCode toggleMenuKey = KeyCode.Escape;
+    [Header("UI Elements")]
+    public TextMeshProUGUI levelNumberText;
 
-   //Menu Boolean
-   private bool isMenuOpen = false;
+    // Menu State
+    private bool isMenuOpen = false;
+    public bool IsMenuOpen => isMenuOpen;
 
-   void Start()
-   {
-    // Ensure panels start in correct state
-    if (menuPanel != null) menuPanel.SetActive(false);
-    if (exitConfirmationPanel != null) exitConfirmationPanel.SetActive(false);
-
-    // Display current scene/level info
-    UpdateLevelDisplay();
-   }
-
-   void Update()
-   {
-    // Toggle menu on Escape key press (New Input System)
-    if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
+    private void Awake()
     {
-        ToggleMenu();
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+        Instance = this;
     }
-   }
-   
-   
-   // Update level display with current scene name
-   void UpdateLevelDisplay()
-   {
+
+    private void Start()
+    {
+        // Ensure panels start in correct hidden state
+        if (menuPanel != null) menuPanel.SetActive(false);
+        if (exitConfirmationPanel != null) exitConfirmationPanel.SetActive(false);
+
+        // Display current scene/level info
+        UpdateLevelDisplay();
+    }
+
+    private void Update()
+    {
+        // Toggle menu on Escape key press (New Input System)
+        if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
+        {
+            // If in exit confirmation, Esc returns to main menu panel
+            if (exitConfirmationPanel != null && exitConfirmationPanel.activeSelf)
+            {
+                OnCancelExit();
+            }
+            else
+            {
+                ToggleMenu();
+            }
+        }
+    }
+
+    // Update level display with current scene name
+    void UpdateLevelDisplay()
+    {
         if (levelNumberText != null)
         {
             string currentSceneName = SceneManager.GetActiveScene().name;
-            // You can customize this format to show "Level 1", "Level 2", etc.
-            levelNumberText.text = "Level: " + currentSceneName;
+            levelNumberText.text = "Active Scene: " + currentSceneName;
         }
-   }
+    }
 
-   public void ToggleMenu()
-   {
-    isMenuOpen = !isMenuOpen;
-    // Toggle main panel visibility
-    if (menuPanel != null) menuPanel.SetActive(isMenuOpen);
+    public void ToggleMenu()
+    {
+        isMenuOpen = !isMenuOpen;
 
-    // Always hide the exit confirmation popup when toggling menu
-    if (exitConfirmationPanel != null) exitConfirmationPanel.SetActive(false);
+        if (menuPanel != null) menuPanel.SetActive(isMenuOpen);
+        if (exitConfirmationPanel != null) exitConfirmationPanel.SetActive(false);
 
-    // Update mouse cursor state and pause/resume game time
-    Cursor.lockState = isMenuOpen ? CursorLockMode.None : CursorLockMode.Locked;
-    Cursor.visible = isMenuOpen;
-    Time.timeScale = isMenuOpen ? 0f : 1f;
+        // Update mouse cursor state and pause/resume game time
+        ApplyCursorAndPauseState(isMenuOpen);
+    }
 
-   }
+    public void CloseMenu()
+    {
+        isMenuOpen = false;
+        if (menuPanel != null) menuPanel.SetActive(false);
+        if (exitConfirmationPanel != null) exitConfirmationPanel.SetActive(false);
+
+        ApplyCursorAndPauseState(false);
+    }
+
+    private void ApplyCursorAndPauseState(bool menuActive)
+    {
+        Cursor.lockState = menuActive ? CursorLockMode.None : CursorLockMode.Locked;
+        Cursor.visible = menuActive;
+        Time.timeScale = menuActive ? 0f : 1f;
+    }
 
     // --- BUTTON CALLBACKS ---
 
@@ -76,10 +107,17 @@ public class GameManager : MonoBehaviour
         SceneManager.LoadScene(currentSceneIndex);
     }
 
-    // 2. Calibrate (Placeholder)
+    // 2. Calibrate VR
     public void OnCalibrateButtonClicked()
     {
-        Debug.Log("Calibrate clicked - Ready for calibration logic.");
+        Debug.Log("[GameManager] Calibrate VR clicked.");
+        if (ScoreHUD.Instance != null)
+        {
+            ScoreHUD.Instance.ShowToast("VR Position & Recenter Calibrated!");
+        }
+#if !UNITY_EDITOR
+        UnityEngine.XR.InputTracking.Recenter();
+#endif
     }
 
     // 3. Open Exit Confirmation Popup
@@ -88,27 +126,24 @@ public class GameManager : MonoBehaviour
         if (exitConfirmationPanel != null)
         {
             exitConfirmationPanel.SetActive(true);
-            menuPanel.SetActive(false);
+            if (menuPanel != null) menuPanel.SetActive(false);
         }
     }
 
-    // 4. Confirm Exit (Close Game)
+    // 4. Confirm Exit (Continue to Exit / Close Game)
     public void OnConfirmExit()
     {
-        Debug.Log("Quitting game...");
+        Debug.Log("[GameManager] Confirm exit chosen. Quitting game...");
         Application.Quit();
-        #if UNITY_EDITOR
-            UnityEditor.EditorApplication.isPlaying = false;
-        #endif
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+#endif
     }
 
-    // 5. Cancel Exit Popup
+    // 5. Cancel Exit Popup (Remain in Game)
     public void OnCancelExit()
     {
-        if (exitConfirmationPanel != null)
-        {
-            exitConfirmationPanel.SetActive(false);
-            menuPanel.SetActive(true);
-        }
+        if (exitConfirmationPanel != null) exitConfirmationPanel.SetActive(false);
+        if (menuPanel != null) menuPanel.SetActive(true);
     }
 }
