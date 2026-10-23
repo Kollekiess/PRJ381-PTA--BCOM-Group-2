@@ -805,8 +805,9 @@ namespace BCSignVR
                 new Color(.95f, .98f, .97f), .16f, true).transform;
             ClassroomUi.Label("BOB'S EXAMPLE  /  RIGHT HAND", example, -1.17f, .49f, .105f, ClassroomUi.DeepBlue, maxWidth: 2.55f);
             trackingText = ClassroomUi.Label("TRACKED HAND  /  RIGHT", learner, -1.17f, .49f, .105f, ClassroomUi.Green, maxWidth: 2.55f);
-            targetPicture = ClassroomUi.Picture("Bob cartoon research hand", "CartoonHandOpen", example,
-                new Vector3(0, -.10f, -.12f), new Vector2(1.02f, 1.02f));
+            // Play the attributed research landmark sequence on the board,
+            // using the same Bob-style hand renderer as the learner card.
+            targetView = new HandSkeletonView("Bob research example hand", content, new Color(.97f, .73f, .57f), true);
             liveView = new HandSkeletonView("Research learner hand", content, new Color(.93f, .68f, .57f), true);
             feedbackText = ClassroomUi.Label("Try the movement at your pace.", content, -3.05f, -1.61f, .16f, ClassroomUi.Ink, maxWidth: 6.1f);
             ClassroomUi.Button("<  Collection", content, -2.35f, -2.05f, 1.5f, ShowSasl, height: .35f);
@@ -843,11 +844,10 @@ namespace BCSignVR
         {
             var duration = references.DurationSeconds * (slowReplay ? 1.65f : 1f);
             var motion = references.GetPose(researchIndex, (Time.time - researchStarted) / duration, researchReference);
-            // The reference stays as Bob's consistent cartoon hand. The lesson
-            // still uses the recorded motion data for timing and recognition,
-            // while the learner side remains live and landmark-driven.
-            if (targetPicture != null)
-                targetPicture.transform.localPosition = new Vector3(0, -.10f + Mathf.Sin(Time.time * 2.1f) * .025f, -.12f);
+            if (targetView != null)
+                targetView.SetPose(researchReference,
+                    content.TransformPoint(new Vector3(-1.67f, -1.15f, -.20f) + motion),
+                    Quaternion.Euler(0, 180, 0), .87f);
             current.tracked = false; TryGetInputHand(current);
             webcamPreview?.SetBase64(inputMode == InputMode.Camera ? webcam.PreviewJpeg : "");
             liveView.SetPose(current, content.TransformPoint(new Vector3(1.67f, -1.15f, -.20f)), Quaternion.Euler(0, 180, 0), .87f);
