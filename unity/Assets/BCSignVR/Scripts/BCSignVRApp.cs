@@ -162,6 +162,12 @@ namespace BCSignVR
             ClassroomUi.Label($"{alphabetIndex + 1} / 26", content, 3.06f, .61f, .18f, ClassroomUi.Blue, TextAnchor.MiddleRight);
             ClassroomUi.Label("Study the fingers, thumb and palm direction. Keep your whole hand in view.",
                 content, -3.06f, .25f, .14f, ClassroomUi.Muted, maxWidth: 6.1f);
+            if (letter == "J")
+                ClassroomUi.Label("Movement: start with your little finger up, then trace a gentle J in the air.",
+                    content, -3.06f, .13f, .105f, ClassroomUi.Blue, maxWidth: 6.1f);
+            else if (letter == "Z")
+                ClassroomUi.Label("Movement: start with your index finger out, then trace a clear Z in the air.",
+                    content, -3.06f, .13f, .105f, ClassroomUi.Blue, maxWidth: 6.1f);
             var example = ClassroomUi.Panel("Official alphabet reference", content, new Vector3(-1.67f, -.69f, 0),
                 new Vector2(2.83f, 1.52f), new Color(.94f, .98f, 1f), .16f, true).transform;
             var learner = ClassroomUi.Panel("Learner camera hand", content, new Vector3(1.67f, -.69f, 0),
@@ -257,6 +263,8 @@ namespace BCSignVR
                 case "V": return "Separate the index and middle fingers into a clear V, keeping the other fingers curled.";
                 case "W": return "Raise three fingers together and keep the thumb and little finger tucked down.";
                 case "Y": return "Extend the thumb and little finger while curling the three middle fingers into your palm.";
+                case "J": return "Keep only your little finger raised, then trace the J smoothly with your wrist.";
+                case "Z": return "Keep only your index finger raised, then draw the Z with a small, clear wrist movement.";
                 default: return $"Bob sees {observed}; compare your {expected} with the example and check finger height, thumb placement and palm direction.";
             }
         }
@@ -310,6 +318,12 @@ namespace BCSignVR
             ClassroomUi.Label($"LETTER {fingerspellIndex + 1} / {fingerspellLetters.Length}", content, 3.06f, .61f, .15f, ClassroomUi.Blue, TextAnchor.MiddleRight);
             ClassroomUi.Label("This is fingerspelling practice, not a claim that the English spelling replaces a SASL word sign.",
                 content, -3.06f, .25f, .12f, ClassroomUi.Muted, maxWidth: 6.2f);
+            if (letter == "J")
+                ClassroomUi.Label("Movement: start with your little finger up, then trace a gentle J in the air.",
+                    content, -3.06f, .13f, .105f, ClassroomUi.Blue, maxWidth: 6.1f);
+            else if (letter == "Z")
+                ClassroomUi.Label("Movement: start with your index finger out, then trace a clear Z in the air.",
+                    content, -3.06f, .13f, .105f, ClassroomUi.Blue, maxWidth: 6.1f);
             var example = ClassroomUi.Panel("Fingerspelling example", content, new Vector3(-1.67f, -.69f, 0),
                 new Vector2(2.83f, 1.52f), new Color(.94f, .98f, 1f), .16f, true).transform;
             var learner = ClassroomUi.Panel("Learner webcam", content, new Vector3(1.67f, -.69f, 0),

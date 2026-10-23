@@ -24,6 +24,18 @@ class App:
     secret: bytes
 
 
+class BCSignVRHTTPServer(ThreadingHTTPServer):
+    """Keep the local learner API responsive during camera/session bursts."""
+
+    # The standard-library server defaults to a backlog of five sockets. A
+    # classroom launcher can produce a short burst of progress uploads while
+    # the camera and UI are both warming up, so a larger queue avoids clients
+    # being reset before the request handler gets a thread.
+    request_queue_size = 64
+    daemon_threads = True
+    allow_reuse_address = True
+
+
 class Handler(BaseHTTPRequestHandler):
     app: App
     server_version = "BCSignVR/0.1"
@@ -171,7 +183,7 @@ class Handler(BaseHTTPRequestHandler):
 def create_server(host="127.0.0.1", port=8787, database_path=DEFAULT_DB, secret=None):
     app = App(Database(database_path), secret or os.environ.get("BCSIGNVR_SECRET", "local-development-secret-change-me").encode())
     handler = type("ConfiguredHandler", (Handler,), {"app": app})
-    return ThreadingHTTPServer((host, port), handler)
+    return BCSignVRHTTPServer((host, port), handler)
 
 
 def main():
