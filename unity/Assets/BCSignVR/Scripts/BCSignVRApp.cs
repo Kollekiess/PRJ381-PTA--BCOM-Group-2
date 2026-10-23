@@ -176,7 +176,9 @@ namespace BCSignVR
             // Use the verified NID/SASL glyph, re-rendered as Bob's peach cartoon
             // hand. This keeps every A–Z pose accurate without showing a photo.
             ClassroomUi.Picture("Bob cartoon alphabet hand", "CartoonHand" + letter, example,
-                new Vector3(0, -.08f, -.12f), new Vector2(1.38f, 1.38f));
+                // Keep a little breathing room inside the 2.83 x 1.52 card;
+                // some glyphs use almost the full transparent texture bounds.
+                new Vector3(0, -.08f, -.12f), new Vector2(1.24f, 1.24f));
             trackingText = ClassroomUi.Label("TRACKED HAND  /  RIGHT", learner, -1.17f, .51f, .105f, ClassroomUi.Green, maxWidth: 2.55f);
             liveView = new HandSkeletonView("Alphabet learner hand", content, new Color(.93f, .68f, .57f), true);
             alphabetStatus = ClassroomUi.Label("Show Bob your RIGHT hand to begin.", content, -3.05f, -1.64f, .15f,
@@ -330,7 +332,7 @@ namespace BCSignVR
                 new Vector2(2.83f, 1.52f), new Color(.95f, .98f, .97f), .16f, true).transform;
             ClassroomUi.Label("BOB'S EXAMPLE  /  RIGHT HAND", example, -1.17f, .51f, .105f, ClassroomUi.DeepBlue, maxWidth: 2.55f);
             ClassroomUi.Picture("Bob cartoon fingerspell hand", "CartoonHand" + letter, example,
-                new Vector3(0, -.05f, -.12f), new Vector2(1.38f, 1.38f));
+                new Vector3(0, -.05f, -.12f), new Vector2(1.24f, 1.24f));
             trackingText = ClassroomUi.Label("TRACKED HAND  /  RIGHT", learner, -1.17f, .51f, .105f, ClassroomUi.Green, maxWidth: 2.55f);
             liveView = new HandSkeletonView("Phrase learner hand", content, new Color(.93f, .68f, .57f), true);
             alphabetStatus = ClassroomUi.Label($"Show the handshape for {letter}.", content, -3.05f, -1.64f, .15f,
