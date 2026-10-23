@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.XR;
 
@@ -157,6 +158,27 @@ namespace BCSignVR
 
     public sealed class BoardPointer : MonoBehaviour
     {
+        [StructLayout(LayoutKind.Sequential)]
+        struct NativePoint { public double x, y; }
+        [StructLayout(LayoutKind.Sequential)]
+        struct NativeSize { public double width, height; }
+        [StructLayout(LayoutKind.Sequential)]
+        struct NativeRect { public NativePoint origin; public NativeSize size; }
+
+#if UNITY_STANDALONE_OSX
+        [DllImport("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")]
+        static extern IntPtr CGEventCreate(IntPtr source);
+        [DllImport("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")]
+        static extern NativePoint CGEventGetLocation(IntPtr eventRef);
+        [DllImport("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")]
+        static extern int CGGetDisplaysWithPoint(NativePoint point, uint maxDisplays,
+            [Out] uint[] displays, out uint displayCount);
+        [DllImport("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")]
+        static extern NativeRect CGDisplayBounds(uint display);
+        [DllImport("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")]
+        static extern void CFRelease(IntPtr value);
+#endif
+
         BoardButton focused;
         BoardButton keyboardFocus;
         int selectedIndex = -1;
@@ -166,7 +188,8 @@ namespace BCSignVR
         {
             var camera = GetComponent<Camera>();
             var vr = XRSettings.isDeviceActive;
-            var ray = vr ? new Ray(transform.position, transform.forward) : camera.ScreenPointToRay(Input.mousePosition);
+            var mousePosition = DesktopMousePosition();
+            var ray = vr ? new Ray(transform.position, transform.forward) : camera.ScreenPointToRay(mousePosition);
             BoardButton next = null;
             // Decorative card meshes can be in front of a button. Search all
             // hits and pick the nearest button collider instead of assuming the
@@ -209,7 +232,7 @@ namespace BCSignVR
             }
             if (Input.GetMouseButtonDown(0))
             {
-                var target = focused ?? ButtonAtScreenPoint(camera, Input.mousePosition);
+                var target = focused ?? ButtonAtScreenPoint(camera, mousePosition);
                 if (target) target.Press();
             }
             if (pressed && !wasPressed && focused) focused.Press();
@@ -226,13 +249,37 @@ namespace BCSignVR
             if (evt == null || evt.type != EventType.MouseDown || evt.button != 0) return;
             var camera = GetComponent<Camera>();
             if (!camera) return;
-            var screenPoint = new Vector3(evt.mousePosition.x, Screen.height - evt.mousePosition.y);
+            var screenPoint = DesktopMousePosition();
             var button = ButtonAtScreenPoint(camera, screenPoint);
             if (button)
             {
                 button.Press();
                 evt.Use();
             }
+        }
+
+        static Vector3 DesktopMousePosition()
+        {
+#if UNITY_STANDALONE_OSX
+            var nativeEvent = CGEventCreate(IntPtr.Zero);
+            if (nativeEvent != IntPtr.Zero)
+            {
+                var location = CGEventGetLocation(nativeEvent);
+                CFRelease(nativeEvent);
+                var displayIds = new uint[1];
+                if (CGGetDisplaysWithPoint(location, 1, displayIds, out var displayCount) == 0 && displayCount > 0)
+                {
+                    var displayBounds = CGDisplayBounds(displayIds[0]);
+                    location.x -= displayBounds.origin.x;
+                    location.y -= displayBounds.origin.y;
+                }
+                var window = Screen.mainWindowPosition;
+                return new Vector3((float)location.x - window.x,
+                    Screen.height - ((float)location.y - window.y), 0);
+            }
+#endif
+            var relative = Display.RelativeMouseAt(Input.mousePosition);
+            return relative == Vector3.zero ? Input.mousePosition : relative;
         }
 
         static BoardButton ButtonAtScreenPoint(Camera camera, Vector3 point)
