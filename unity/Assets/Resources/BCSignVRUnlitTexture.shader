@@ -3,9 +3,11 @@ Shader "BCSignVR/UnlitTexture"
     Properties { _MainTex ("Texture", 2D) = "white" {} _Color ("Tint", Color) = (1,1,1,1) }
     SubShader
     {
-        Tags { "RenderType"="Opaque" }
+        Tags { "Queue"="Transparent" "RenderType"="Transparent" }
         Pass
         {
+            Blend SrcAlpha OneMinusSrcAlpha
+            ZWrite Off
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag

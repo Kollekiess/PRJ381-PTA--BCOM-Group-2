@@ -18,6 +18,8 @@ namespace BCSignVR
         readonly Transform[] bones = new Transform[Bones.GetLength(0)];
         readonly Material material;
         readonly Transform palm;
+        readonly Transform knuckles;
+        readonly Transform wrist;
         readonly bool solid;
 
         public HandSkeletonView(string name, Transform parent, Color color, bool solid = false)
@@ -32,18 +34,24 @@ namespace BCSignVR
                 sphere.name = $"Joint {i}";
                 Object.Destroy(sphere.GetComponent<Collider>());
                 sphere.transform.SetParent(root, false);
-                sphere.transform.localScale = Vector3.one * (solid ? .074f : .035f);
+                // Keep landmarks subtle. The silhouette is built from the
+                // rounded finger segments below, so joints should not look
+                // like oversized robot ball bearings.
+                sphere.transform.localScale = Vector3.one * (solid ? .030f : .022f);
                 sphere.GetComponent<Renderer>().sharedMaterial = material;
                 joints[i] = sphere.transform;
             }
             for (var i = 0; i < bones.Length; i++)
             {
-                var cylinder = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                cylinder.name = $"Bone {i}";
-                Object.Destroy(cylinder.GetComponent<Collider>());
-                cylinder.transform.SetParent(root, false);
-                cylinder.GetComponent<Renderer>().sharedMaterial = material;
-                bones[i] = cylinder.transform;
+                // A scaled sphere gives each phalanx a soft capsule with a
+                // rounded end. That reads as an illustrated human hand much
+                // better than thin, uniform cylinders.
+                var segment = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                segment.name = $"Rounded finger segment {i}";
+                Object.Destroy(segment.GetComponent<Collider>());
+                segment.transform.SetParent(root, false);
+                segment.GetComponent<Renderer>().sharedMaterial = material;
+                bones[i] = segment.transform;
             }
             if (solid)
             {
@@ -52,6 +60,18 @@ namespace BCSignVR
                 shape.transform.SetParent(root, false);
                 shape.GetComponent<Renderer>().sharedMaterial = material;
                 palm = shape.transform;
+
+                var bridge = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                bridge.name = "Rounded finger webbing"; Object.Destroy(bridge.GetComponent<Collider>());
+                bridge.transform.SetParent(root, false);
+                bridge.GetComponent<Renderer>().sharedMaterial = material;
+                knuckles = bridge.transform;
+
+                var wristShape = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                wristShape.name = "Soft wrist"; Object.Destroy(wristShape.GetComponent<Collider>());
+                wristShape.transform.SetParent(root, false);
+                wristShape.GetComponent<Renderer>().sharedMaterial = material;
+                wrist = wristShape.transform;
             }
         }
 
@@ -71,18 +91,45 @@ namespace BCSignVR
                 var delta = b - a;
                 bones[i].localPosition = (a + b) * 0.5f;
                 bones[i].localRotation = Quaternion.FromToRotation(Vector3.up, delta);
-                bones[i].localScale = new Vector3(solid ? .070f : .018f, delta.magnitude * 0.5f, solid ? .070f : .018f);
+                if (solid)
+                {
+                    var radius = SegmentRadius(i);
+                    // A Unity sphere has diameter 2, so its local Z scale is
+                    // the half-length plus one radius at each rounded end.
+                    // The segment is aligned from local Y (the same axis used
+                    // by the old cylinder), so elongate Y and keep X/Z round.
+                    bones[i].localScale = new Vector3(radius,
+                        delta.magnitude * .5f + radius, radius);
+                }
+                else
+                    bones[i].localScale = new Vector3(.018f, delta.magnitude * .5f, .018f);
             }
             if (palm != null)
             {
                 var baseOfFingers = (joints[7].localPosition + joints[12].localPosition + joints[17].localPosition + joints[22].localPosition) / 4;
-                var wrist = joints[0].localPosition;
-                var up = baseOfFingers - wrist;
-                palm.localPosition = wrist + up * .53f;
+                var wristPoint = joints[0].localPosition;
+                var up = baseOfFingers - wristPoint;
+                // Lift the palm slightly into the finger bases so the hand
+                // reads as one continuous illustrated form rather than a
+                // circle with pieces floating above it.
+                palm.localPosition = wristPoint + up * .56f;
                 palm.localRotation = Quaternion.FromToRotation(Vector3.up, up);
-                palm.localScale = new Vector3(Vector3.Distance(joints[7].localPosition, joints[22].localPosition) + .045f,
-                    up.magnitude * 1.15f, .10f);
+                palm.localScale = new Vector3(Vector3.Distance(joints[7].localPosition, joints[22].localPosition) + .28f,
+                    up.magnitude * 1.05f, .16f);
+                var fingerWidth = Vector3.Distance(joints[7].localPosition, joints[22].localPosition);
+                knuckles.localPosition = wristPoint + up * .57f;
+                knuckles.localRotation = Quaternion.FromToRotation(Vector3.up, up);
+                knuckles.localScale = new Vector3(fingerWidth + .25f, .13f, .17f);
+                wrist.localPosition = wristPoint - up.normalized * .06f;
+                wrist.localScale = new Vector3(.24f, .23f, .16f);
             }
+        }
+
+        static float SegmentRadius(int index)
+        {
+            // The wrist/base is fuller and the fingertips taper gently.
+            var segment = index % 5;
+            return segment == 0 ? .105f : segment == 1 ? .092f : segment == 2 ? .080f : segment == 3 ? .068f : .058f;
         }
     }
 }

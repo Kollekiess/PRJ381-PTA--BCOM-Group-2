@@ -183,12 +183,18 @@ namespace BCSignVR
         BoardButton keyboardFocus;
         int selectedIndex = -1;
         bool wasPressed;
+        Vector3 guiMousePosition;
+        bool hasGuiMousePosition;
         readonly List<InputDevice> devices = new();
         void Update()
         {
             var camera = GetComponent<Camera>();
             var vr = XRSettings.isDeviceActive;
-            var mousePosition = DesktopMousePosition();
+            // IMGUI reports the cursor in window-local coordinates on macOS,
+            // including multi-display setups. Reuse that position for hover
+            // and clicks instead of trying to reconstruct it from a global
+            // Quartz cursor location.
+            var mousePosition = hasGuiMousePosition ? guiMousePosition : DesktopMousePosition();
             var ray = vr ? new Ray(transform.position, transform.forward) : camera.ScreenPointToRay(mousePosition);
             BoardButton next = null;
             // Decorative card meshes can be in front of a button. Search all
@@ -246,11 +252,13 @@ namespace BCSignVR
         void OnGUI()
         {
             var evt = Event.current;
-            if (evt == null || evt.type != EventType.MouseDown || evt.button != 0) return;
+            if (evt == null) return;
+            guiMousePosition = new Vector3(evt.mousePosition.x, Screen.height - evt.mousePosition.y, 0);
+            hasGuiMousePosition = true;
+            if (evt.type != EventType.MouseDown || evt.button != 0) return;
             var camera = GetComponent<Camera>();
             if (!camera) return;
-            var screenPoint = DesktopMousePosition();
-            var button = ButtonAtScreenPoint(camera, screenPoint);
+            var button = ButtonAtScreenPoint(camera, guiMousePosition);
             if (button)
             {
                 button.Press();

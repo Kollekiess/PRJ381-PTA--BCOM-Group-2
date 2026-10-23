@@ -39,6 +39,8 @@ namespace BCSignVR
         Transform progressFill;
         BoardButton nextButton;
         HandSkeletonView targetView, liveView;
+        GameObject practiceExamplePicture, practiceLearnerPicture;
+        GameObject targetPicture;
         WebcamPreviewView webcamPreview;
         InputMode inputMode = InputMode.Camera;
         Page page;
@@ -115,6 +117,8 @@ namespace BCSignVR
             content = new GameObject(next.ToString()).transform; content.SetParent(board, false);
             content.localPosition = new Vector3(0, 0, -.10f);
             targetView = null; liveView = null; feedbackText = detailsText = matchText = trackingText = demoPoseText = null;
+            practiceExamplePicture = practiceLearnerPicture = null;
+            targetPicture = null;
             successCountdown = null; successPrompt = null;
             progressFill = null; nextButton = null;
             matchHeld = 0;
@@ -138,9 +142,8 @@ namespace BCSignVR
             var handCard = ClassroomUi.Panel("Hand welcome", content, new Vector3(2.13f, -.17f, 0),
                 new Vector2(1.95f, 1.87f), new Color(.91f, .96f, .99f), .20f, true).transform;
             ClassroomUi.Label("Next: greetings", handCard, 0, .65f, .145f, ClassroomUi.DeepBlue, TextAnchor.MiddleCenter, 1.75f);
-            targetView = new HandSkeletonView("Welcome hand", content, new Color(.24f, .64f, .83f), true);
-            targetView.SetPose(SimulatedHandPoseProvider.Template(SimulatedHandPoseProvider.DemoPose.Open),
-                content.TransformPoint(new Vector3(2.13f, -.54f, -.12f)), Quaternion.Euler(0, 180, -12), .82f);
+            ClassroomUi.Picture("Welcome cartoon hand", "CartoonHandOpen", handCard,
+                new Vector3(0, -.02f, -.12f), new Vector2(1.10f, 1.10f));
             ClassroomUi.Button("Preview greeting", handCard, 0, -.64f, 1.58f, ShowGreeting, height: .31f);
             ClassroomUi.Label("Choose your input", content, 1.23f, -1.43f, .13f, ClassroomUi.Muted);
             ClassroomUi.Button(ModeName(), content, 2.13f, -1.82f, 1.95f, CycleMode);
@@ -164,12 +167,12 @@ namespace BCSignVR
             var learner = ClassroomUi.Panel("Learner camera hand", content, new Vector3(1.67f, -.69f, 0),
                 new Vector2(2.83f, 1.52f), new Color(.95f, .98f, .97f), .16f, true).transform;
             ClassroomUi.Label("BOB'S EXAMPLE  /  RIGHT HAND", example, -1.17f, .51f, .105f, ClassroomUi.DeepBlue, maxWidth: 2.55f);
-            // The reference font is a hand illustration, not a normal glyph. Keep
-            // it inside the example card so every A–Z pose is readable at once.
-            ClassroomUi.FontLabel(letter, "NIDSASLFingerspell-Regular", example, 0, -.10f, 1.08f, ClassroomUi.Ink);
-            trackingText = ClassroomUi.Label("LIVE WEBCAM  /  RIGHT HAND", learner, -1.17f, .51f, .105f, ClassroomUi.Green, maxWidth: 2.55f);
-            webcamPreview = new WebcamPreviewView("Alphabet webcam preview", learner, new Vector3(0, -.16f, -.045f), new Vector2(2.56f, .88f));
-            liveView = new HandSkeletonView("Alphabet learner hand", content, new Color(.22f, .65f, .55f), true);
+            // Use the verified NID/SASL glyph, re-rendered as Bob's peach cartoon
+            // hand. This keeps every A–Z pose accurate without showing a photo.
+            ClassroomUi.Picture("Bob cartoon alphabet hand", "CartoonHand" + letter, example,
+                new Vector3(0, -.08f, -.12f), new Vector2(1.38f, 1.38f));
+            trackingText = ClassroomUi.Label("TRACKED HAND  /  RIGHT", learner, -1.17f, .51f, .105f, ClassroomUi.Green, maxWidth: 2.55f);
+            liveView = new HandSkeletonView("Alphabet learner hand", content, new Color(.93f, .68f, .57f), true);
             alphabetStatus = ClassroomUi.Label("Show Bob your RIGHT hand to begin.", content, -3.05f, -1.64f, .15f,
                 ClassroomUi.Ink, maxWidth: 5.25f);
             ClassroomUi.Button("<  Previous", content, -2.42f, -2.08f, 1.35f,
@@ -177,7 +180,7 @@ namespace BCSignVR
             ClassroomUi.Button("Camera warm-up", content, -.67f, -2.08f, 1.65f, StartWarmup, height: .35f);
             ClassroomUi.Button(alphabetIndex == 25 ? "Finish alphabet" : "Practised  /  next  >", content,
                 1.75f, -2.08f, 2.15f, RecordAlphabetAndNext, true, .35f);
-            ClassroomUi.Label("Reference: National Institute for the Deaf", content, 3.05f, -1.50f, .09f,
+            ClassroomUi.Label("Reference: National Institute for the Deaf", content, 3.05f, -1.72f, .09f,
                 ClassroomUi.Muted, TextAnchor.MiddleRight, 3.0f);
         }
 
@@ -265,20 +268,17 @@ namespace BCSignVR
             tutor?.Say("Watch the greeting movement, then try it yourself.", true);
             ClassroomUi.Label("Greeting someone", content, -3.06f, .61f, .29f, ClassroomUi.Ink);
             ClassroomUi.Label("BEGINNER PHRASES  /  1", content, 3.06f, .61f, .12f, ClassroomUi.Blue, TextAnchor.MiddleRight);
-            ClassroomUi.Label("Movement, face and body position all carry meaning in SASL.",
-                content, -3.06f, .25f, .14f, ClassroomUi.Muted, maxWidth: 6.1f);
-            ClassroomUi.Label("VISUAL PRACTICE ONLY  /  phrase scoring unlocks after reviewed SASL recordings",
-                content, -3.06f, .02f, .105f, ClassroomUi.Blue, maxWidth: 6.1f);
+            ClassroomUi.Label("Visual practice: movement, face and body position all carry meaning in SASL.",
+                content, -3.06f, .25f, .13f, ClassroomUi.Muted, maxWidth: 6.1f);
             var example = ClassroomUi.Panel("Greeting reference", content, new Vector3(-1.67f, -.68f, 0),
                 new Vector2(2.83f, 1.55f), new Color(.94f, .98f, 1f), .16f, true).transform;
             var learner = ClassroomUi.Panel("Greeting learner", content, new Vector3(1.67f, -.68f, 0),
                 new Vector2(2.83f, 1.55f), new Color(.95f, .98f, .97f), .16f, true).transform;
             ClassroomUi.Label("WATCH THE MOVEMENT", example, -1.17f, .52f, .105f, ClassroomUi.DeepBlue);
-            ClassroomUi.Picture("NID greeting reference", "SASL_Greetings_NID", example,
-                new Vector3(0, -.17f, -.05f), new Vector2(1.30f, 1.04f));
-            trackingText = ClassroomUi.Label("LIVE WEBCAM  /  RIGHT HAND", learner, -1.17f, .52f, .095f, ClassroomUi.Green, maxWidth: 2.55f);
-            webcamPreview = new WebcamPreviewView("Greeting webcam preview", learner, new Vector3(0, -.16f, -.045f), new Vector2(2.56f, .88f));
-            liveView = new HandSkeletonView("Greeting learner hand", content, new Color(.22f, .65f, .55f), true);
+            ClassroomUi.Picture("Bob cartoon greeting hand", "CartoonHandGreeting", example,
+                new Vector3(0, -.13f, -.05f), new Vector2(1.22f, 1.06f));
+            trackingText = ClassroomUi.Label("TRACKED HAND  /  RIGHT", learner, -1.17f, .52f, .095f, ClassroomUi.Green, maxWidth: 2.55f);
+            liveView = new HandSkeletonView("Greeting learner hand", content, new Color(.93f, .68f, .57f), true);
             alphabetStatus = ClassroomUi.Label("Show your RIGHT hand and copy the greeting movement.", content,
                 -3.05f, -1.64f, .15f, ClassroomUi.Ink, maxWidth: 4.5f);
             ClassroomUi.Button("<  Classroom", content, -2.45f, -2.08f, 1.35f, ShowHome, height: .35f);
@@ -315,10 +315,10 @@ namespace BCSignVR
             var learner = ClassroomUi.Panel("Learner webcam", content, new Vector3(1.67f, -.69f, 0),
                 new Vector2(2.83f, 1.52f), new Color(.95f, .98f, .97f), .16f, true).transform;
             ClassroomUi.Label("BOB'S EXAMPLE  /  RIGHT HAND", example, -1.17f, .51f, .105f, ClassroomUi.DeepBlue, maxWidth: 2.55f);
-            ClassroomUi.FontLabel(letter, "NIDSASLFingerspell-Regular", example, 0, -.05f, 1.98f, ClassroomUi.Ink);
-            trackingText = ClassroomUi.Label("LIVE WEBCAM  /  RIGHT HAND", learner, -1.17f, .51f, .105f, ClassroomUi.Green, maxWidth: 2.55f);
-            webcamPreview = new WebcamPreviewView("Phrase webcam preview", learner, new Vector3(0, -.16f, -.045f), new Vector2(2.56f, .88f));
-            liveView = new HandSkeletonView("Phrase learner hand", content, new Color(.22f, .65f, .55f), true);
+            ClassroomUi.Picture("Bob cartoon fingerspell hand", "CartoonHand" + letter, example,
+                new Vector3(0, -.05f, -.12f), new Vector2(1.38f, 1.38f));
+            trackingText = ClassroomUi.Label("TRACKED HAND  /  RIGHT", learner, -1.17f, .51f, .105f, ClassroomUi.Green, maxWidth: 2.55f);
+            liveView = new HandSkeletonView("Phrase learner hand", content, new Color(.93f, .68f, .57f), true);
             alphabetStatus = ClassroomUi.Label($"Show the handshape for {letter}.", content, -3.05f, -1.64f, .15f,
                 ClassroomUi.Ink, maxWidth: 6.1f);
             ClassroomUi.Button("<  Greeting", content, -2.45f, -2.08f, 1.45f, ShowGreeting, height: .35f);
@@ -488,8 +488,16 @@ namespace BCSignVR
                 new Vector2(2.83f, 1.46f), new Color(.95f, .98f, .97f), .16f, true).transform;
             ClassroomUi.Label("WATCH BOB", targetCard, -1.17f, .49f, .12f, ClassroomUi.DeepBlue);
             trackingText = ClassroomUi.Label("YOUR HAND", liveCard, -1.17f, .49f, .12f, ClassroomUi.Green, maxWidth: 2.3f);
-            targetView = new HandSkeletonView("Coach demonstration", content, new Color(.20f, .58f, .78f), true);
-            liveView = new HandSkeletonView("Learner hand", content, new Color(.22f, .65f, .55f), true);
+            var handTexture = lessonIndex == 0 ? "CartoonHandOpen" : lessonIndex == 1 ? "CartoonHandFist" : "CartoonHandPoint";
+            practiceExamplePicture = ClassroomUi.Picture("Bob cartoon hand", handTexture, targetCard,
+                new Vector3(0, -.05f, -.06f), new Vector2(1.12f, 1.12f));
+            if (inputMode == InputMode.Demo)
+                practiceLearnerPicture = ClassroomUi.Picture("Demo cartoon hand", handTexture, liveCard,
+                    new Vector3(0, -.05f, -.06f), new Vector2(1.12f, 1.12f));
+            else if (inputMode == InputMode.Camera)
+                liveView = new HandSkeletonView("Tracked learner hand", content, new Color(.93f, .68f, .57f), true);
+            else
+                liveView = new HandSkeletonView("Learner hand", content, new Color(.78f, .53f, .45f), true);
             feedbackText = ClassroomUi.Label("Bring your hand into view", content, -3.05f, -1.62f, .18f, ClassroomUi.Ink, maxWidth: 5.25f);
             matchText = ClassroomUi.Label("", content, 3.08f, -1.62f, .16f, ClassroomUi.Green, TextAnchor.MiddleRight);
             var track = ClassroomUi.Panel("Hold progress", content, new Vector3(0, -1.88f, -.02f), new Vector2(6.13f, .045f),
@@ -508,6 +516,17 @@ namespace BCSignVR
         void CycleDemoPose()
         {
             simulated.CurrentPose = (SimulatedHandPoseProvider.DemoPose)(((int)simulated.CurrentPose + 1) % 3);
+            SetDemoPicture();
+        }
+
+        void SetDemoPicture()
+        {
+            if (practiceLearnerPicture == null) return;
+            var textureName = simulated.CurrentPose == SimulatedHandPoseProvider.DemoPose.Open ? "CartoonHandOpen" :
+                simulated.CurrentPose == SimulatedHandPoseProvider.DemoPose.Fist ? "CartoonHandFist" : "CartoonHandPoint";
+            var texture = Resources.Load<Texture2D>(textureName);
+            var renderer = practiceLearnerPicture.GetComponent<Renderer>();
+            if (texture != null && renderer != null) renderer.material.mainTexture = texture;
         }
 
         void Update()
@@ -521,19 +540,22 @@ namespace BCSignVR
             if (page != Page.Practice) return;
             if (inputMode == InputMode.Demo)
             {
-                if (Input.GetKeyDown(KeyCode.Alpha1)) simulated.CurrentPose = SimulatedHandPoseProvider.DemoPose.Open;
-                if (Input.GetKeyDown(KeyCode.Alpha2)) simulated.CurrentPose = SimulatedHandPoseProvider.DemoPose.Fist;
-                if (Input.GetKeyDown(KeyCode.Alpha3)) simulated.CurrentPose = SimulatedHandPoseProvider.DemoPose.Point;
+                if (Input.GetKeyDown(KeyCode.Alpha1)) { simulated.CurrentPose = SimulatedHandPoseProvider.DemoPose.Open; SetDemoPicture(); }
+                if (Input.GetKeyDown(KeyCode.Alpha2)) { simulated.CurrentPose = SimulatedHandPoseProvider.DemoPose.Fist; SetDemoPicture(); }
+                if (Input.GetKeyDown(KeyCode.Alpha3)) { simulated.CurrentPose = SimulatedHandPoseProvider.DemoPose.Point; SetDemoPicture(); }
             }
             current.tracked = false;
             if (inputMode == InputMode.Camera) webcam.TryGetRightHand(current);
             else if (inputMode == InputMode.VR) openXr.TryGetRightHand(current);
             else simulated.TryGetRightHand(current);
+            webcamPreview?.SetBase64(inputMode == InputMode.Camera ? webcam.PreviewJpeg : "");
             var target = SimulatedHandPoseProvider.Template((SimulatedHandPoseProvider.DemoPose)lessonIndex);
             // Small, slow wrist sway invites the learner to inspect a three-dimensional hand.
             var angle = Mathf.Sin((Time.time - replayStarted) * .8f) * 12f;
-            targetView.SetPose(target, content.TransformPoint(new Vector3(-1.67f, -1.18f, -.20f)), Quaternion.Euler(0, 180 + angle, 0), .92f);
-            liveView.SetPose(current, content.TransformPoint(new Vector3(1.67f, -1.18f, -.20f)), Quaternion.Euler(0, 180, 0), .92f);
+            if (targetView != null)
+                targetView.SetPose(target, content.TransformPoint(new Vector3(-1.67f, -1.18f, -.20f)), Quaternion.Euler(0, 180 + angle, 0), .92f);
+            if (liveView != null)
+                liveView.SetPose(current, content.TransformPoint(new Vector3(1.67f, -1.18f, -.20f)), Quaternion.Euler(0, 180, 0), .92f);
             var match = PracticeMatch();
             var correct = current.tracked && match >= PracticeThreshold();
             if (!lessonCompleted)
@@ -586,7 +608,7 @@ namespace BCSignVR
             return string.IsNullOrWhiteSpace(webcam.DetectedHand) ? "RIGHT" : webcam.DetectedHand.ToUpperInvariant();
         }
 
-        string WebcamHandLabel() => $"LIVE WEBCAM  /  {HandName()} HAND";
+        string WebcamHandLabel() => $"TRACKED HAND  /  {HandName()}";
 
         public static float TargetMatch(HandPoseFrame frame, HandPoseFrame target)
         {
@@ -781,11 +803,11 @@ namespace BCSignVR
                 new Color(.94f, .98f, 1f), .16f, true).transform;
             var learner = ClassroomUi.Panel("Research learner", content, new Vector3(1.67f, -.65f, 0), new Vector2(2.83f, 1.46f),
                 new Color(.95f, .98f, .97f), .16f, true).transform;
-            ClassroomUi.Label("RECORDED REFERENCE", example, -1.17f, .49f, .12f, ClassroomUi.DeepBlue);
-            trackingText = ClassroomUi.Label("LIVE WEBCAM  /  RIGHT HAND", learner, -1.17f, .49f, .105f, ClassroomUi.Green, maxWidth: 2.55f);
-            webcamPreview = new WebcamPreviewView("Research webcam preview", learner, new Vector3(0, -.16f, -.045f), new Vector2(2.56f, .88f));
-            targetView = new HandSkeletonView("Recorded SASL hand", content, new Color(.20f, .58f, .78f), true);
-            liveView = new HandSkeletonView("Research learner hand", content, new Color(.22f, .65f, .55f), true);
+            ClassroomUi.Label("BOB'S EXAMPLE  /  RIGHT HAND", example, -1.17f, .49f, .105f, ClassroomUi.DeepBlue, maxWidth: 2.55f);
+            trackingText = ClassroomUi.Label("TRACKED HAND  /  RIGHT", learner, -1.17f, .49f, .105f, ClassroomUi.Green, maxWidth: 2.55f);
+            targetPicture = ClassroomUi.Picture("Bob cartoon research hand", "CartoonHandOpen", example,
+                new Vector3(0, -.10f, -.12f), new Vector2(1.02f, 1.02f));
+            liveView = new HandSkeletonView("Research learner hand", content, new Color(.93f, .68f, .57f), true);
             feedbackText = ClassroomUi.Label("Try the movement at your pace.", content, -3.05f, -1.61f, .16f, ClassroomUi.Ink, maxWidth: 6.1f);
             ClassroomUi.Button("<  Collection", content, -2.35f, -2.05f, 1.5f, ShowSasl, height: .35f);
             ClassroomUi.Button("Replay", content, -.65f, -2.05f, 1.25f, () => researchStarted = Time.time, height: .35f);
@@ -821,8 +843,11 @@ namespace BCSignVR
         {
             var duration = references.DurationSeconds * (slowReplay ? 1.65f : 1f);
             var motion = references.GetPose(researchIndex, (Time.time - researchStarted) / duration, researchReference);
-            targetView.SetPose(researchReference, content.TransformPoint(new Vector3(-1.67f, -1.15f, -.20f) + motion),
-                Quaternion.Euler(0, 180, 0), .87f);
+            // The reference stays as Bob's consistent cartoon hand. The lesson
+            // still uses the recorded motion data for timing and recognition,
+            // while the learner side remains live and landmark-driven.
+            if (targetPicture != null)
+                targetPicture.transform.localPosition = new Vector3(0, -.10f + Mathf.Sin(Time.time * 2.1f) * .025f, -.12f);
             current.tracked = false; TryGetInputHand(current);
             webcamPreview?.SetBase64(inputMode == InputMode.Camera ? webcam.PreviewJpeg : "");
             liveView.SetPose(current, content.TransformPoint(new Vector3(1.67f, -1.15f, -.20f)), Quaternion.Euler(0, 180, 0), .87f);
