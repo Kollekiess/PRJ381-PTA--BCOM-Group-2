@@ -172,13 +172,19 @@ namespace BCSignVR
                 new Vector2(2.83f, 1.52f), new Color(.94f, .98f, 1f), .16f, true).transform;
             var learner = ClassroomUi.Panel("Learner camera hand", content, new Vector3(1.67f, -.69f, 0),
                 new Vector2(2.83f, 1.52f), new Color(.95f, .98f, .97f), .16f, true).transform;
-            ClassroomUi.Label("BOB'S EXAMPLE  /  RIGHT HAND", example, -1.17f, .51f, .105f, ClassroomUi.DeepBlue, maxWidth: 2.55f);
+            ClassroomUi.Label(letter == "J" || letter == "Z" ? "BOB'S EXAMPLE  /  MOVING" : "BOB'S EXAMPLE  /  RIGHT HAND",
+                example, -1.17f, .51f, .105f, ClassroomUi.DeepBlue, maxWidth: 2.55f);
             // Use the verified NID/SASL glyph, re-rendered as Bob's peach cartoon
-            // hand. This keeps every A–Z pose accurate without showing a photo.
-            ClassroomUi.Picture("Bob cartoon alphabet hand", "CartoonHand" + letter, example,
-                // Keep a little breathing room inside the 2.83 x 1.52 card;
-                // some glyphs use almost the full transparent texture bounds.
-                new Vector3(0, -.08f, -.12f), new Vector2(1.24f, 1.24f));
+            // hand. J and Z keep their pose geometry while looping along a
+            // movement path so the learner can copy the motion.
+            if (letter == "J" || letter == "Z")
+                MovementDemoView.Create("Bob animated " + letter + " movement", "CartoonHand" + letter, letter,
+                    example, new Vector3(0, -.08f, -.12f), new Vector2(1.24f, 1.24f));
+            else
+                ClassroomUi.Picture("Bob cartoon alphabet hand", "CartoonHand" + letter, example,
+                    // Keep a little breathing room inside the 2.83 x 1.52 card;
+                    // some glyphs use almost the full transparent texture bounds.
+                    new Vector3(0, -.08f, -.12f), new Vector2(1.24f, 1.24f));
             trackingText = ClassroomUi.Label("TRACKED HAND  /  RIGHT", learner, -1.17f, .51f, .105f, ClassroomUi.Green, maxWidth: 2.55f);
             liveView = new HandSkeletonView("Alphabet learner hand", content, new Color(.93f, .68f, .57f), true);
             alphabetStatus = ClassroomUi.Label("Show Bob your RIGHT hand to begin.", content, -3.05f, -1.64f, .15f,
@@ -284,8 +290,8 @@ namespace BCSignVR
                 new Vector2(2.83f, 1.55f), new Color(.94f, .98f, 1f), .16f, true).transform;
             var learner = ClassroomUi.Panel("Greeting learner", content, new Vector3(1.67f, -.68f, 0),
                 new Vector2(2.83f, 1.55f), new Color(.95f, .98f, .97f), .16f, true).transform;
-            ClassroomUi.Label("WATCH THE MOVEMENT", example, -1.17f, .52f, .105f, ClassroomUi.DeepBlue);
-            ClassroomUi.Picture("Bob cartoon greeting hand", "CartoonHandGreeting", example,
+            ClassroomUi.Label("WATCH BOB'S MOVEMENT", example, -1.17f, .52f, .105f, ClassroomUi.DeepBlue, maxWidth: 2.55f);
+            MovementDemoView.Create("Bob animated greeting", "CartoonHandGreeting", "greeting", example,
                 new Vector3(0, -.13f, -.05f), new Vector2(1.22f, 1.06f));
             trackingText = ClassroomUi.Label("TRACKED HAND  /  RIGHT", learner, -1.17f, .52f, .095f, ClassroomUi.Green, maxWidth: 2.55f);
             liveView = new HandSkeletonView("Greeting learner hand", content, new Color(.93f, .68f, .57f), true);
@@ -330,9 +336,14 @@ namespace BCSignVR
                 new Vector2(2.83f, 1.52f), new Color(.94f, .98f, 1f), .16f, true).transform;
             var learner = ClassroomUi.Panel("Learner webcam", content, new Vector3(1.67f, -.69f, 0),
                 new Vector2(2.83f, 1.52f), new Color(.95f, .98f, .97f), .16f, true).transform;
-            ClassroomUi.Label("BOB'S EXAMPLE  /  RIGHT HAND", example, -1.17f, .51f, .105f, ClassroomUi.DeepBlue, maxWidth: 2.55f);
-            ClassroomUi.Picture("Bob cartoon fingerspell hand", "CartoonHand" + letter, example,
-                new Vector3(0, -.05f, -.12f), new Vector2(1.24f, 1.24f));
+            ClassroomUi.Label(letter == "J" || letter == "Z" ? "BOB'S EXAMPLE  /  MOVING" : "BOB'S EXAMPLE  /  RIGHT HAND",
+                example, -1.17f, .51f, .105f, ClassroomUi.DeepBlue, maxWidth: 2.55f);
+            if (letter == "J" || letter == "Z")
+                MovementDemoView.Create("Bob animated fingerspell " + letter, "CartoonHand" + letter, letter,
+                    example, new Vector3(0, -.05f, -.12f), new Vector2(1.24f, 1.24f));
+            else
+                ClassroomUi.Picture("Bob cartoon fingerspell hand", "CartoonHand" + letter, example,
+                    new Vector3(0, -.05f, -.12f), new Vector2(1.24f, 1.24f));
             trackingText = ClassroomUi.Label("TRACKED HAND  /  RIGHT", learner, -1.17f, .51f, .105f, ClassroomUi.Green, maxWidth: 2.55f);
             liveView = new HandSkeletonView("Phrase learner hand", content, new Color(.93f, .68f, .57f), true);
             alphabetStatus = ClassroomUi.Label($"Show the handshape for {letter}.", content, -3.05f, -1.64f, .15f,
