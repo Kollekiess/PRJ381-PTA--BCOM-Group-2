@@ -22,6 +22,7 @@ namespace BCSignVR
         readonly GestureEvaluator evaluator = new();
         readonly SimulatedHandPoseProvider simulated = new();
         readonly OpenXRHandPoseProvider openXr = new();
+        readonly SaslAlphabetPoseRecognizer questAlphabet = new();
         FloatingHandsView floatingHands;
         readonly List<float> sessionScores = new();
         WebcamHandPoseProvider webcam;
@@ -62,11 +63,14 @@ namespace BCSignVR
         int remoteCompleted;
         float remoteAverage;
         bool preview;
+        bool vrClassroomPlaced;
         bool questInputDefaulted;
         TutorAvatar tutor;
         int alphabetIndex;
         int alphabetMistakes;
         TextMesh alphabetStatus;
+        string alphabetRecognizedLabel = "UNKNOWN";
+        float alphabetRecognitionConfidence;
         string fingerspellPhrase = "HELLO";
         string fingerspellLetters = "HELLO";
         int fingerspellIndex;
@@ -124,7 +128,7 @@ namespace BCSignVR
             ClassroomUi.Button("?  Help", board, 2.42f, 1.10f, 1.15f, ShowHelp);
             controlsFooter = new GameObject("Comfort and controls").transform;
             controlsFooter.position = new Vector3(.65f, .04f, 4.5f);
-            ClassroomUi.Label("Click to choose  /  Tab + Enter  /  VR: look at a button and pinch", controlsFooter,
+            ClassroomUi.Label("Click to choose  /  Tab + Enter  /  VR: aim + trigger, pinch, or dwell", controlsFooter,
                 0, 0, .12f, ClassroomUi.Muted, TextAnchor.MiddleCenter, 7.3f);
         }
 
@@ -139,9 +143,22 @@ namespace BCSignVR
             if (controlsFooter != null) controlsFooter.SetParent(presentationRoot, true);
         }
 
-        void PlaceVrClassroom()
+        bool PlaceVrClassroom()
         {
-            if (presentationRoot == null || board == null || learnerCamera == null) return;
+            if (presentationRoot == null || board == null || learnerCamera == null) return false;
+
+            // Do not place the room from the desktop fallback camera pose.
+            // Quest tracking becomes available just after scene startup; the
+            // fallback camera is intentionally several metres back for the
+            // desktop framing and would leave the board almost against the
+            // headset if used as the VR anchor.
+            var head = InputDevices.GetDeviceAtXRNode(XRNode.Head);
+            if (!head.isValid ||
+                !head.TryGetFeatureValue(CommonUsages.devicePosition, out _) ||
+                !head.TryGetFeatureValue(CommonUsages.deviceRotation, out _))
+                return false;
+            if (head.TryGetFeatureValue(CommonUsages.isTracked, out var headTracked) && !headTracked)
+                return false;
 
             var forward = Vector3.ProjectOnPlane(learnerCamera.transform.forward, Vector3.up);
             if (forward.sqrMagnitude < .001f) forward = Vector3.forward;
@@ -151,8 +168,12 @@ namespace BCSignVR
             // view. In a headset, anchor and scale that same scene relative to
             // the current tracking space so it cannot load metres away or above
             // the learner after moving the project between computers.
-            const float scale = .36f;
-            var boardCenter = learnerCamera.transform.position + forward * 2.35f;
+            // Keep the board comfortably in the user's field of view instead
+            // of letting the desktop-sized classroom feel like a wall pressed
+            // against their face. The room remains around the learner while
+            // the lesson surface sits at a natural conversation distance.
+            const float scale = .28f;
+            var boardCenter = learnerCamera.transform.position + forward * 2.85f;
             // Quest can report a floor-relative tracking origin (y = 0) while
             // the eye pose is applied internally by OpenXR. Keep the board at
             // eye height in that mode so the classroom is not below the view.
@@ -167,7 +188,9 @@ namespace BCSignVR
             presentationRoot.position = boardCenter - rotation * Vector3.Scale(boardLocalPosition, presentationRoot.localScale);
             if (controlsFooter != null) controlsFooter.gameObject.SetActive(false);
 
-            Debug.Log($"BCSignVR VR classroom anchored {boardCenter} at {scale:0.00} scale.");
+            var distance = Vector3.Distance(learnerCamera.transform.position, boardCenter);
+            Debug.Log($"BCSignVR VR classroom anchored {boardCenter} at {distance:0.00}m, {scale:0.00} scale.");
+            return true;
         }
 
         void BeginPage(Page next)
@@ -239,7 +262,7 @@ namespace BCSignVR
             ClassroomUi.Button("Preview greeting", handCard, 0, -.64f, 1.58f, ShowGreeting, height: .31f);
             ClassroomUi.Label("Choose your input", content, 1.23f, -1.43f, .13f, ClassroomUi.Muted);
             ClassroomUi.Button(ModeName(), content, 2.13f, -1.82f, 1.95f, CycleMode);
-            ClassroomUi.Label(inputMode == InputMode.VR ? "Quest hands + pinch to choose." : "Camera mode uses the computer camera.",
+            ClassroomUi.Label(inputMode == InputMode.VR ? "Quest: controller trigger, hand pinch, or 5s dwell." : "Camera mode uses the computer camera.",
                 content, 2.13f, -2.14f, .105f, ClassroomUi.Muted, TextAnchor.MiddleCenter, 1.95f);
         }
 
@@ -247,6 +270,9 @@ namespace BCSignVR
         {
             alphabetIndex = Mathf.Clamp(index, 0, 25);
             alphabetMistakes = 0;
+            questAlphabet.Reset();
+            alphabetRecognizedLabel = "UNKNOWN";
+            alphabetRecognitionConfidence = 0f;
             lessonStarted = Time.time;
             BeginPage(Page.Alphabet);
             var letter = ((char)('A' + alphabetIndex)).ToString();
@@ -303,6 +329,7 @@ namespace BCSignVR
             var letter = ((char)('A' + alphabetIndex)).ToString();
             current.tracked = false;
             TryGetInputHand(current);
+            UpdateAlphabetRecognition();
             webcamPreview?.SetBase64(inputMode == InputMode.Camera ? webcam.PreviewJpeg : "");
             if (liveView != null)
                 liveView.SetLearnerPose(current, content.TransformPoint(new Vector3(1.67f, -1.19f, -.20f)),
@@ -311,15 +338,30 @@ namespace BCSignVR
             trackingText.text = current.tracked ? inputMode == InputMode.Demo ? "YOUR DEMO HAND  /  RIGHT" : inputMode == InputMode.Camera ? WebcamHandLabel() : "YOUR VR HAND  /  RIGHT  /  LIVE" : inputMode == InputMode.Camera && !webcam.IsReceiving ?
                 "CAMERA  /  WAITING  /  RIGHT HAND" : "YOUR RIGHT HAND  /  NOT VISIBLE";
             var expected = "TEAM_SASL_" + letter;
-            var recognized = inputMode == InputMode.Camera ? webcam.RecognizedLabel : "";
+            var recognized = alphabetRecognizedLabel;
             if (current.tracked && recognized == expected)
-                alphabetStatus.text = $"Bob sees {letter}  /  research match {webcam.RecognitionConfidence:P0}. Compare the example, then save practice.";
+                alphabetStatus.text = $"Model matches {letter}  /  confidence {alphabetRecognitionConfidence:P0}. Compare the example, then save practice.";
             else if (current.tracked && recognized.StartsWith("TEAM_SASL_"))
-                alphabetStatus.text = $"Bob sees {recognized.Replace("TEAM_SASL_", "")}. Adjust your hand to match {letter}, then try again.";
+                alphabetStatus.text = $"Model sees {recognized.Replace("TEAM_SASL_", "")}. Adjust your hand to match {letter}, then try again.";
             else alphabetStatus.text = current.tracked
-                ? "Hand visible. Compare it with Bob's example, then choose Practised."
+                ? inputMode == InputMode.Demo ? "Demo hand ready. Compare it with Bob's example." : "Hand tracked. Hold the sign steady while the model checks it."
                 : inputMode == InputMode.Camera ? webcam.IsReceiving ? "Camera ready. Show your RIGHT hand to the webcam." :
                 "Camera waiting. Allow Camera access to continue." : "Raise your RIGHT hand in front of you.";
+        }
+
+        void UpdateAlphabetRecognition()
+        {
+            alphabetRecognizedLabel = "UNKNOWN";
+            alphabetRecognitionConfidence = 0f;
+            if (!current.tracked) { questAlphabet.Reset(); return; }
+            if (inputMode == InputMode.Camera)
+            {
+                alphabetRecognizedLabel = webcam.RecognizedLabel;
+                alphabetRecognitionConfidence = webcam.RecognitionConfidence;
+            }
+            else if (inputMode == InputMode.VR)
+                questAlphabet.TryRecognize(current, learnerCamera, out alphabetRecognizedLabel,
+                    out alphabetRecognitionConfidence);
         }
 
         void RecordAlphabetAndNext()
@@ -332,19 +374,23 @@ namespace BCSignVR
             }
             var letter = ((char)('A' + alphabetIndex)).ToString();
             var expected = "TEAM_SASL_" + letter;
-            if (inputMode == InputMode.Camera && current.tracked && webcam.RecognizedLabel.StartsWith("TEAM_SASL_") &&
-                webcam.RecognizedLabel != expected && webcam.RecognitionConfidence >= .60f)
+            if (inputMode != InputMode.Demo &&
+                (alphabetRecognizedLabel != expected || alphabetRecognitionConfidence < .60f))
             {
                 alphabetMistakes++;
-                var observed = webcam.RecognizedLabel.Replace("TEAM_SASL_", "");
-                var tip = AlphabetTip(letter, observed);
-                alphabetStatus.text = $"Not quite {letter}. Bob sees {observed}. {tip}";
+                var observed = alphabetRecognizedLabel.StartsWith("TEAM_SASL_")
+                    ? alphabetRecognizedLabel.Replace("TEAM_SASL_", "") : "unknown";
+                var tip = observed == "unknown"
+                    ? "Hold the whole hand still and make the letter more clearly before saving."
+                    : AlphabetTip(letter, observed);
+                alphabetStatus.text = observed == "unknown"
+                    ? $"The model hasn't confirmed {letter} yet. {tip}"
+                    : $"Not quite {letter}. The model sees {observed}. {tip}";
                 tutor?.CoachCorrection();
                 tutor?.Say(tip, true);
                 return;
             }
-            var accuracy = inputMode == InputMode.Camera && webcam.RecognizedLabel == "TEAM_SASL_" + letter
-                ? webcam.RecognitionConfidence : 0f;
+            var accuracy = inputMode == InputMode.Demo ? 0f : alphabetRecognitionConfidence;
             try
             {
                 history.Add(new LocalSessionRecord { lessonId = "alphabet-" + letter.ToLowerInvariant(), accuracy = accuracy,
@@ -352,7 +398,8 @@ namespace BCSignVR
                     // Reference practice is intentionally local-only; a confident
                     // webcam match is a scored attempt and must enter the upload
                     // queue so the seeded alphabet lesson can be recorded.
-                    synced = false, inputSource = accuracy > 0 ? "webcam-sasl-research" : "reference" });
+                    synced = false, inputSource = inputMode == InputMode.VR ? "openxr-sasl-team-model" :
+                        inputMode == InputMode.Camera ? "webcam-sasl-research" : "demo" });
                 saveStatus = "Alphabet practice saved";
                 if (apiConnected) StartCoroutine(SyncPending());
             }
@@ -417,6 +464,9 @@ namespace BCSignVR
             fingerspellMistakes = 0;
             fingerspellHeld = 0;
             fingerspellScores.Clear();
+            questAlphabet.Reset();
+            alphabetRecognizedLabel = "UNKNOWN";
+            alphabetRecognitionConfidence = 0f;
             fingerspellStarted = Time.time;
             BeginPage(Page.Fingerspell);
             tutor?.Say($"Let's fingerspell {fingerspellPhrase}. One letter at a time, nice and clear.", true);
@@ -426,6 +476,9 @@ namespace BCSignVR
         void RenderFingerspellPage()
         {
             var letter = fingerspellLetters[fingerspellIndex].ToString();
+            questAlphabet.Reset();
+            alphabetRecognizedLabel = "UNKNOWN";
+            alphabetRecognitionConfidence = 0f;
             ClassroomUi.Label($"Fingerspell  {fingerspellPhrase}", content, -3.06f, .61f, .29f, ClassroomUi.Ink);
             ClassroomUi.Label($"LETTER {fingerspellIndex + 1} / {fingerspellLetters.Length}", content, 3.06f, .61f, .15f, ClassroomUi.Blue, TextAnchor.MiddleRight);
             ClassroomUi.Label("This is fingerspelling practice, not a claim that the English spelling replaces a SASL word sign.",
@@ -464,6 +517,7 @@ namespace BCSignVR
             var expected = "TEAM_SASL_" + fingerspellLetters[fingerspellIndex];
             current.tracked = false;
             TryGetInputHand(current);
+            UpdateAlphabetRecognition();
             webcamPreview?.SetBase64(inputMode == InputMode.Camera ? webcam.PreviewJpeg : "");
             if (liveView != null)
                 liveView.SetLearnerPose(current, content.TransformPoint(new Vector3(1.67f, -1.19f, -.20f)),
@@ -471,20 +525,22 @@ namespace BCSignVR
             UpdateLearnerHandPicture("CartoonHand" + fingerspellLetters[fingerspellIndex]);
             trackingText.text = current.tracked ? inputMode == InputMode.Camera ? WebcamHandLabel() : "YOUR HAND  /  RIGHT  /  LIVE" :
                 inputMode == InputMode.Camera && !webcam.IsReceiving ? "CAMERA  /  WAITING  /  RIGHT HAND" : "YOUR RIGHT HAND  /  NOT VISIBLE";
-            if (current.tracked && inputMode == InputMode.Camera && webcam.RecognizedLabel == expected)
+            if (current.tracked && alphabetRecognizedLabel == expected && alphabetRecognitionConfidence >= .60f)
             {
                 fingerspellHeld += Time.deltaTime;
-                alphabetStatus.text = $"Bob sees {fingerspellLetters[fingerspellIndex]}  /  {webcam.RecognitionConfidence:P0}. Hold it steady, then check.";
+                alphabetStatus.text = $"Model matches {fingerspellLetters[fingerspellIndex]}  /  {alphabetRecognitionConfidence:P0}. Hold it steady, then check.";
                 tutor?.Say("That handshape is looking good. Hold it steady.");
             }
             else
             {
                 fingerspellHeld = 0;
-                alphabetStatus.text = current.tracked ? "Hand visible. Compare your fingers with Bob's example." :
+                alphabetStatus.text = current.tracked && alphabetRecognizedLabel.StartsWith("TEAM_SASL_")
+                    ? $"Model sees {alphabetRecognizedLabel.Replace("TEAM_SASL_", "")}. Adjust your hand to match {fingerspellLetters[fingerspellIndex]}." :
+                    current.tracked ? "Hand tracked. Hold the letter steady while the model checks it." :
                     inputMode == InputMode.Camera ? "Show your RIGHT hand to the webcam." : "Raise your RIGHT hand in front of you.";
-                if (current.tracked && inputMode == InputMode.Camera && webcam.RecognizedLabel.StartsWith("TEAM_SASL_") && webcam.RecognitionConfidence >= .60f)
+                if (current.tracked && alphabetRecognizedLabel.StartsWith("TEAM_SASL_") && alphabetRecognitionConfidence >= .60f)
                 {
-                    var observed = webcam.RecognizedLabel.Replace("TEAM_SASL_", "");
+                    var observed = alphabetRecognizedLabel.Replace("TEAM_SASL_", "");
                     tutor?.Say(AlphabetTip(fingerspellLetters[fingerspellIndex].ToString(), observed));
                 }
             }
@@ -493,18 +549,20 @@ namespace BCSignVR
         void CheckFingerspellLetter()
         {
             var expected = "TEAM_SASL_" + fingerspellLetters[fingerspellIndex];
-            var correct = inputMode == InputMode.Camera && current.tracked && webcam.RecognizedLabel == expected && webcam.RecognitionConfidence >= .60f;
+            var correct = inputMode != InputMode.Demo && current.tracked &&
+                alphabetRecognizedLabel == expected && alphabetRecognitionConfidence >= .60f;
             if (inputMode == InputMode.Demo) correct = current.tracked;
             if (!correct)
             {
                 fingerspellMistakes++;
-                var observed = webcam.RecognizedLabel.StartsWith("TEAM_SASL_") ? webcam.RecognizedLabel.Replace("TEAM_SASL_", "") : "unknown";
+                var observed = alphabetRecognizedLabel.StartsWith("TEAM_SASL_")
+                    ? alphabetRecognizedLabel.Replace("TEAM_SASL_", "") : "unknown";
                 var tip = observed == "unknown" ? "Show the whole hand, then try the letter again." : AlphabetTip(fingerspellLetters[fingerspellIndex].ToString(), observed);
                 alphabetStatus.text = tip;
                 tutor?.Say(tip, true);
                 return;
             }
-            fingerspellScores.Add(inputMode == InputMode.Camera ? webcam.RecognitionConfidence : .75f);
+            fingerspellScores.Add(inputMode == InputMode.Demo ? .75f : alphabetRecognitionConfidence);
             fingerspellHeld = 0;
             if (++fingerspellIndex < fingerspellLetters.Length) RenderFingerspellPage();
             else CompleteFingerspellPhrase();
@@ -668,8 +726,6 @@ namespace BCSignVR
 
         void Update()
         {
-            if (!preview && XRSettings.isDeviceActive && presentationRoot != null && presentationRoot.localScale.x > .99f)
-                PlaceVrClassroom();
             if (Input.GetKeyDown(KeyCode.Escape)) ShowHome();
             if (page == Page.Alphabet) { UpdateAlphabet(); return; }
             if (page == Page.Basics) { UpdateBasics(); return; }
@@ -744,8 +800,8 @@ namespace BCSignVR
             }
             if (!preview && XRSettings.isDeviceActive)
                 floatingHands?.Update();
-            if (!preview && XRSettings.isDeviceActive && presentationRoot != null && presentationRoot.localScale.x > .99f)
-                PlaceVrClassroom();
+            if (!preview && XRSettings.isDeviceActive && !vrClassroomPlaced)
+                vrClassroomPlaced = PlaceVrClassroom();
         }
 
         string PoseHint(int index) => HandPoseCoach.Hint(current, (SimulatedHandPoseProvider.DemoPose)index);
@@ -910,9 +966,9 @@ namespace BCSignVR
         {
             BeginPage(Page.Help);
             ClassroomUi.Label("Make yourself comfortable.", content, -3.06f, .56f, .29f, ClassroomUi.Ink);
-            HelpRow("01", "Choose an input", "Webcam uses the computer camera. VR uses headset hands.\nDemo lets you try everything with the on-screen pose button.", -.02f);
-            HelpRow("02", "Watch, then try", "Keep your full hand in view and use good, even lighting.\nThe blue hand is the example; the green hand is yours.", -.70f);
-            HelpRow("03", "You're in control", "Hold a matching pose, or choose Check hand.\nUse Continue when you're ready. Escape returns to the classroom.", -1.38f);
+            HelpRow("01", "Choose an input", "Webcam uses your computer camera. Quest uses tracked hands or Touch controllers.\nDemo lets you try everything with the on-screen pose button.", -.02f);
+            HelpRow("02", "Watch, then try", "Keep your whole hand visible. Bob shows the target; the live hand mirrors your tracked pose.\nQuest works with either hand or controller.", -.70f);
+            HelpRow("03", "Choose comfortably", "Point with a controller and squeeze its trigger, or pinch with a tracked hand.\nYou can also hold the cursor on a button for 5 seconds.", -1.38f);
             ClassroomUi.Button("Got it", content, 2.37f, -2.11f, 1.4f, ShowHome, true, .34f);
         }
         void HelpRow(string number, string heading, string body, float y)
@@ -1028,6 +1084,7 @@ namespace BCSignVR
         void TryGetInputHand(HandPoseFrame destination)
         {
             if (inputMode == InputMode.Camera) webcam.TryGetRightHand(destination);
+            else if (inputMode == InputMode.VR && preview) simulated.TryGetRightHand(destination);
             else if (inputMode == InputMode.VR) openXr.TryGetRightHand(destination);
             else simulated.TryGetRightHand(destination);
         }
@@ -1140,6 +1197,7 @@ namespace BCSignVR
             else if (scenario == "reference") ShowResearchPractice(0);
             else if (scenario == "input") CycleMode();
             else if (scenario == "alphabet") ShowAlphabet(0);
+            else if (scenario == "alphabet-vr") { inputMode = InputMode.VR; ShowAlphabet(1); }
             else if (scenario.StartsWith("alphabet-", StringComparison.OrdinalIgnoreCase))
             {
                 var suffix = scenario.Substring("alphabet-".Length);

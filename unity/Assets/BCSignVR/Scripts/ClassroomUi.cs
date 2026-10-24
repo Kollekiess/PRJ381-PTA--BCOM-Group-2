@@ -433,7 +433,7 @@ namespace BCSignVR
             visual.reticle.gameObject.SetActive(true);
             visual.reticle.position = end + ray.direction * .004f;
             visual.reticle.rotation = StableReticleRotation(ray.direction);
-            visual.reticle.localScale = Vector3.one * (candidate.target != null ? .074f : .054f);
+            visual.reticle.localScale = Vector3.one * .064f;
             visual.reticleRenderer.sharedMaterial.color = color;
             visual.centerRenderer.sharedMaterial.color = color;
             DrawDwellDots(visual, end + ray.direction * .008f, visual.reticle.rotation, dwellProgress);
@@ -443,7 +443,7 @@ namespace BCSignVR
         {
             if (visual == null || visual.dwellDots == null) return;
             const int dotCount = 12;
-            const float radius = .070f;
+            const float radius = .058f;
             var filled = Mathf.Clamp(Mathf.CeilToInt(Mathf.Clamp01(progress) * dotCount), 0, dotCount);
             for (var index = 0; index < dotCount; index++)
             {
@@ -452,7 +452,7 @@ namespace BCSignVR
                 var dot = visual.dwellDots[index];
                 dot.position = center + rotation * local;
                 dot.rotation = rotation;
-                dot.localScale = Vector3.one * .018f;
+                dot.localScale = Vector3.one * .014f;
                 visual.dwellDotRenderers[index].sharedMaterial.color = index < filled
                     ? new Color(.08f, .08f, .08f, 1f) : new Color(.82f, .82f, .82f, 1f);
                 dot.gameObject.SetActive(true);
@@ -514,7 +514,6 @@ namespace BCSignVR
             var pressTarget = default(BoardButton);
             var dwellPressTarget = default(BoardButton);
             var pressed = false;
-            var previousFocused = focused;
 
             if (!vr)
             {
@@ -551,8 +550,6 @@ namespace BCSignVR
                 }
             }
             if (next != focused) { if (focused) focused.Focus(false); focused = next; if (focused) focused.Focus(true); }
-            if (pressed && !wasPressed && !pressTarget && previousFocused)
-                pressTarget = previousFocused;
             if (Input.GetKeyDown(KeyCode.Tab))
             {
                 var buttons = FindObjectsByType<BoardButton>(FindObjectsSortMode.InstanceID);
@@ -643,7 +640,7 @@ namespace BCSignVR
                 if (TryGetHandRay(handSubsystem.rightHand, ref rightPinching, out var rightRay, out var rightPinch))
                 {
                     var candidate = new PointerCandidate {
-                        ray = StabilizeRay(4, rightRay), pressed = rightPinch, maxLength = 2.4f,
+                        ray = StabilizeRay(4, rightRay), pressed = rightPinch, maxLength = 4.2f,
                         visualIndex = candidates.Count, sourceId = 4
                     };
                     ResolveCandidate(ref candidate); candidates.Add(candidate);
@@ -651,7 +648,7 @@ namespace BCSignVR
                 if (TryGetHandRay(handSubsystem.leftHand, ref leftPinching, out var leftRay, out var leftPinch))
                 {
                     var candidate = new PointerCandidate {
-                        ray = StabilizeRay(3, leftRay), pressed = leftPinch, maxLength = 2.4f,
+                        ray = StabilizeRay(3, leftRay), pressed = leftPinch, maxLength = 4.2f,
                         visualIndex = candidates.Count, sourceId = 3
                     };
                     ResolveCandidate(ref candidate); candidates.Add(candidate);
@@ -680,7 +677,7 @@ namespace BCSignVR
                 var candidate = new PointerCandidate {
                     ray = StabilizeRay(sourceId, ray),
                     pressed = IsControllerPressed(device),
-                    maxLength = 2.4f,
+                    maxLength = 4.2f,
                     visualIndex = candidates.Count,
                     sourceId = sourceId
                 };
@@ -692,7 +689,7 @@ namespace BCSignVR
             {
                 var gazeCandidate = new PointerCandidate {
                     ray = new Ray(transform.position, transform.forward),
-                    maxLength = 2.4f,
+                    maxLength = 4.2f,
                     visualIndex = 0,
                     sourceId = 0
                 };
@@ -710,18 +707,30 @@ namespace BCSignVR
             for (var index = 0; index < candidates.Count; index++)
                 if (candidates[index].pressed && candidates[index].target != null) return index;
 
-            // Hand tracking is the dominant mode when available. This avoids
-            // an idle controller pose stealing the cursor from the user's
-            // index finger, while a real trigger/pinch above still wins.
+            // A controller intentionally aimed at a control should take over
+            // from idle hand tracking so the Quest remotes stay first-class
+            // pointers when the learner picks them up. An idle controller
+            // pointed elsewhere must not steal focus from a hand over a button.
             for (var index = 0; index < candidates.Count; index++)
-                if (candidates[index].sourceId == 4 || candidates[index].sourceId == 3) return index;
+                if ((candidates[index].sourceId == 2 || candidates[index].sourceId == 1) &&
+                    candidates[index].target != null) return index;
 
-            // Once a controller source is chosen, keep it until it disappears.
+            // The right hand is the default in hand mode, but cursor/dwell is
+            // visible only if it really lands on a selectable control.
+            for (var index = 0; index < candidates.Count; index++)
+                if ((candidates[index].sourceId == 4 || candidates[index].sourceId == 3) &&
+                    candidates[index].target != null) return index;
+
+            // Preserve the last-used pointer only after giving any currently
+            // aimed hand/controller target a chance to take over.
             for (var index = 0; index < candidates.Count; index++)
                 if (candidates[index].sourceId == activeSourceId) return index;
 
-            // Devices are sorted right-hand first, so a fresh session starts
-            // with the expected dominant-hand pointer.
+            for (var index = 0; index < candidates.Count; index++)
+                if (candidates[index].sourceId == 4 || candidates[index].sourceId == 3) return index;
+
+            // Devices are sorted right-hand first, so a fresh controller
+            // session starts with the expected dominant-hand pointer.
             return 0;
         }
 
@@ -743,20 +752,13 @@ namespace BCSignVR
 
         void ResolveCandidate(ref PointerCandidate candidate)
         {
-            candidate.target = FindButton(candidate.ray, out candidate.targetHit);
+            candidate.target = FindButton(candidate.ray, candidate.maxLength, out candidate.targetHit);
             if (candidate.target == null)
             {
                 candidate.hasVisualPoint = TryGetUiPoint(candidate.ray, candidate.maxLength, out candidate.visualPoint);
-                // If a tracked index finger is temporarily parallel to the
-                // board, keep the cursor usable by falling back to the user's
-                // head aim instead of placing it at an arbitrary far point.
-                if (!candidate.hasVisualPoint && candidate.sourceId != 0)
-                {
-                    var gaze = new Ray(transform.position, transform.forward);
-                    candidate.target = FindButton(gaze, out candidate.targetHit);
-                    if (candidate.target == null)
-                        candidate.hasVisualPoint = TryGetUiPoint(gaze, candidate.maxLength, out candidate.visualPoint);
-                }
+                // Never silently turn a hand/controller ray into a head-gaze
+                // ray: that displayed the dwell cursor while the learner was
+                // signing and could auto-activate a control they were not aiming at.
             }
         }
 
@@ -764,16 +766,17 @@ namespace BCSignVR
         {
             if (device.TryGetFeatureValue(CommonUsages.triggerButton, out var trigger) && trigger) return true;
             if (device.TryGetFeatureValue(CommonUsages.trigger, out var triggerAxis) && triggerAxis > .55f) return true;
-            return device.TryGetFeatureValue(CommonUsages.primaryButton, out var primary) && primary;
+            if (device.TryGetFeatureValue(CommonUsages.primaryButton, out var primary) && primary) return true;
+            return device.TryGetFeatureValue(CommonUsages.secondaryButton, out var secondary) && secondary;
         }
 
-        static BoardButton FindButton(Ray ray, out RaycastHit buttonHit)
+        static BoardButton FindButton(Ray ray, float maxDistance, out RaycastHit buttonHit)
         {
             buttonHit = default;
             // Decorative card meshes can be in front of a button. Search all
             // hits and pick the nearest button collider instead of assuming the
             // first hit is interactive.
-            var hits = Physics.RaycastAll(ray, 20f, ~0, QueryTriggerInteraction.Collide);
+            var hits = Physics.RaycastAll(ray, maxDistance, ~0, QueryTriggerInteraction.Collide);
             Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
             foreach (var hit in hits)
             {
@@ -835,9 +838,9 @@ namespace BCSignVR
             ray = default;
             pinching = false;
             if (!hand.isTracked) { pinchState = false; return false; }
-            var hasIndexBase = hand.GetJoint(XRHandJointID.IndexProximal).TryGetPose(out var indexBase);
+            var hasIndexBase = hand.GetJoint(XRHandJointID.IndexMetacarpal).TryGetPose(out var indexBase);
             if (!hasIndexBase)
-                hasIndexBase = hand.GetJoint(XRHandJointID.IndexMetacarpal).TryGetPose(out indexBase);
+                hasIndexBase = hand.GetJoint(XRHandJointID.IndexProximal).TryGetPose(out indexBase);
             if (!hasIndexBase || !hand.GetJoint(XRHandJointID.IndexTip).TryGetPose(out var tip))
                 return false;
             var direction = tip.position - indexBase.position;

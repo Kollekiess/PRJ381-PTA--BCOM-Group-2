@@ -9,7 +9,7 @@ if [[ ! -x "$APP" ]]; then
 fi
 
 output_dir="$(mktemp -d /tmp/bcsignvr-ui.XXXXXX)"
-pages=(greeting fingerspell alphabet practice success progress help input sasl reference)
+pages=(greeting fingerspell alphabet alphabet-vr practice success progress help input sasl reference)
 for letter in {a..z}; do pages+=("alphabet-$letter"); done
 for page in $pages; do
   output="$output_dir/$page.png"

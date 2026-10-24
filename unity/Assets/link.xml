@@ -1,0 +1,12 @@
+<linker>
+  <!-- GameObject.CreatePrimitive adds these colliders by native type lookup.
+       Preserve every primitive collider subtype used by the VR scene so the
+       Quest IL2CPP build can create a primitive and remove its collider. -->
+  <assembly fullname="UnityEngine.PhysicsModule">
+    <type fullname="UnityEngine.Collider" preserve="all" />
+    <type fullname="UnityEngine.BoxCollider" preserve="all" />
+    <type fullname="UnityEngine.CapsuleCollider" preserve="all" />
+    <type fullname="UnityEngine.SphereCollider" preserve="all" />
+    <type fullname="UnityEngine.MeshCollider" preserve="all" />
+  </assembly>
+</linker>

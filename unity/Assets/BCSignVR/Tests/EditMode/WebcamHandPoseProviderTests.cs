@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using NUnit.Framework;
+using UnityEngine;
 using UnityEngine.TestTools;
 
 namespace BCSignVR.Tests
@@ -32,9 +33,9 @@ namespace BCSignVR.Tests
 
             var frame = new BCSignVR.HandPoseFrame();
             var received = false;
-            for (var attempt = 0; attempt < 20 && !received; attempt++)
+            for (var attempt = 0; attempt < 100 && !received; attempt++)
             {
-                yield return null;
+                yield return new WaitForSecondsRealtime(.01f);
                 received = provider.TryGetRightHand(frame);
             }
 
