@@ -32,6 +32,11 @@ namespace BCSignVR
         bool slowReplay;
         Transform board;
         Transform content;
+        Transform presentationRoot;
+        Transform classroomRoot;
+        Transform chalkboardFrame;
+        Transform controlsFooter;
+        Camera learnerCamera;
         TextMesh connectionText, feedbackText, detailsText, matchText, trackingText, demoPoseText;
         TextMesh successCountdown;
         Transform successPrompt;
@@ -74,6 +79,7 @@ namespace BCSignVR
             QualitySettings.anisotropicFiltering = AnisotropicFiltering.ForceEnable;
             preview = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("BCSIGNVR_SCREENSHOT"));
             ClassroomFactory.Build();
+            classroomRoot = GameObject.Find("Sign Club Classroom")?.transform;
             tutor = FindFirstObjectByType<TutorAvatar>();
             BuildCamera();
             history = new LocalSessionStore();
@@ -82,6 +88,7 @@ namespace BCSignVR
             for (var i = 0; i < Labels.Length; i++)
                 evaluator.AddTemplate(Labels[i], SimulatedHandPoseProvider.Template((SimulatedHandPoseProvider.DemoPose)i));
             BuildShell();
+            CreatePresentationRoot();
             ShowHome();
             StartCoroutine(ConnectBackend());
             if (preview) StartCoroutine(CapturePreview(Environment.GetEnvironmentVariable("BCSIGNVR_SCREENSHOT")));
@@ -89,8 +96,8 @@ namespace BCSignVR
 
         void BuildShell()
         {
-            ClassroomUi.Panel("Chalkboard frame", null, new Vector3(.65f, 2.65f, 4.96f),
-                new Vector2(7.55f, 5.05f), new Color(.13f, .31f, .25f), .28f, true);
+            chalkboardFrame = ClassroomUi.Panel("Chalkboard frame", null, new Vector3(.65f, 2.65f, 4.96f),
+                new Vector2(7.55f, 5.05f), new Color(.13f, .31f, .25f), .28f, true).transform;
             board = ClassroomUi.Panel("Learning board", null, new Vector3(.65f, 2.65f, 4.9f),
                 new Vector2(7.2f, 4.7f), Color.white, .26f, true).transform;
             ClassroomUi.Label("BC sign club", board, -3.13f, 1.92f, .28f, ClassroomUi.DeepBlue);
@@ -102,10 +109,47 @@ namespace BCSignVR
             ClassroomUi.Button("Explore signs", board, -.84f, 1.10f, 1.42f, ShowSasl);
             ClassroomUi.Button("My progress", board, .76f, 1.10f, 1.52f, ShowProgress);
             ClassroomUi.Button("?  Help", board, 2.56f, 1.10f, 1.12f, ShowHelp);
-            var footer = new GameObject("Comfort and controls").transform;
-            footer.position = new Vector3(.65f, .04f, 4.5f);
-            ClassroomUi.Label("Click to choose  /  Tab + Enter  /  VR: look at a button and pinch", footer,
+            controlsFooter = new GameObject("Comfort and controls").transform;
+            controlsFooter.position = new Vector3(.65f, .04f, 4.5f);
+            ClassroomUi.Label("Click to choose  /  Tab + Enter  /  VR: look at a button and pinch", controlsFooter,
                 0, 0, .12f, ClassroomUi.Muted, TextAnchor.MiddleCenter, 7.3f);
+        }
+
+        void CreatePresentationRoot()
+        {
+            presentationRoot = new GameObject("BCSignVR Presentation Root").transform;
+            presentationRoot.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+            presentationRoot.localScale = Vector3.one;
+            if (classroomRoot != null) classroomRoot.SetParent(presentationRoot, true);
+            if (chalkboardFrame != null) chalkboardFrame.SetParent(presentationRoot, true);
+            if (board != null) board.SetParent(presentationRoot, true);
+            if (controlsFooter != null) controlsFooter.SetParent(presentationRoot, true);
+        }
+
+        void PlaceVrClassroom()
+        {
+            if (presentationRoot == null || board == null || learnerCamera == null) return;
+
+            var forward = Vector3.ProjectOnPlane(learnerCamera.transform.forward, Vector3.up);
+            if (forward.sqrMagnitude < .001f) forward = Vector3.forward;
+            forward.Normalize();
+
+            // The authored classroom is intentionally spacious for the desktop
+            // view. In a headset, anchor and scale that same scene relative to
+            // the current tracking space so it cannot load metres away or above
+            // the learner after moving the project between computers.
+            const float scale = .36f;
+            var boardCenter = learnerCamera.transform.position + forward * 2.35f;
+            boardCenter.y = learnerCamera.transform.position.y - .08f;
+            var boardLocalPosition = board.localPosition;
+            var rotation = Quaternion.LookRotation(forward, Vector3.up);
+
+            presentationRoot.SetPositionAndRotation(Vector3.zero, rotation);
+            presentationRoot.localScale = Vector3.one * scale;
+            presentationRoot.position = boardCenter - rotation * Vector3.Scale(boardLocalPosition, presentationRoot.localScale);
+            if (controlsFooter != null) controlsFooter.gameObject.SetActive(false);
+
+            Debug.Log($"BCSignVR VR classroom anchored {boardCenter} at {scale:0.00} scale.");
         }
 
         void BeginPage(Page next)
@@ -601,6 +645,8 @@ namespace BCSignVR
 
         void Update()
         {
+            if (!preview && XRSettings.isDeviceActive && presentationRoot != null && presentationRoot.localScale.x > .99f)
+                PlaceVrClassroom();
             if (Input.GetKeyDown(KeyCode.Escape)) ShowHome();
             if (page == Page.Alphabet) { UpdateAlphabet(); return; }
             if (page == Page.Basics) { UpdateBasics(); return; }
@@ -960,6 +1006,7 @@ namespace BCSignVR
             var item = new GameObject("Learner camera"); item.tag = "MainCamera";
             item.transform.position = new Vector3(0, 1.85f, -2.6f);
             var camera = item.AddComponent<Camera>(); camera.nearClipPlane = .03f; camera.farClipPlane = 50;
+            learnerCamera = camera;
             camera.fieldOfView = 50f; camera.backgroundColor = ClassroomFactory.Sky;
             item.AddComponent<AudioListener>(); item.AddComponent<DesktopCameraController>();
             item.AddComponent<BoardPointer>(); item.AddComponent<HeadPoseDriver>();
