@@ -133,7 +133,8 @@ namespace BCSignVR.Editor
                 {
                     var typeName = feature?.GetType().FullName;
                     if (typeName == "UnityEngine.XR.OpenXR.Features.MetaQuestSupport.MetaQuestFeature" ||
-                        typeName == "UnityEngine.XR.OpenXR.Features.Interactions.MetaQuestTouchPlusControllerProfile")
+                        typeName == "UnityEngine.XR.OpenXR.Features.Interactions.MetaQuestTouchPlusControllerProfile" ||
+                        typeName == "UnityEngine.XR.OpenXR.Features.Interactions.OculusTouchControllerProfile")
                         feature.enabled = true;
                     else if (typeName == "UnityEngine.XR.OpenXR.Features.OculusQuestSupport.OculusQuestFeature")
                         feature.enabled = false;

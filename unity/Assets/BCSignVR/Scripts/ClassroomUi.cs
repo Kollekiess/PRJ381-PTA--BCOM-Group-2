@@ -9,6 +9,8 @@ using NewInputSystem = UnityEngine.InputSystem.InputSystem;
 using NewXRController = UnityEngine.InputSystem.XR.XRController;
 using NewVector3Control = UnityEngine.InputSystem.Controls.Vector3Control;
 using NewQuaternionControl = UnityEngine.InputSystem.Controls.QuaternionControl;
+using NewButtonControl = UnityEngine.InputSystem.Controls.ButtonControl;
+using NewAxisControl = UnityEngine.InputSystem.Controls.AxisControl;
 
 namespace BCSignVR
 {
@@ -226,7 +228,7 @@ namespace BCSignVR
         float dwellElapsed;
         bool dwellFired;
         int selectedIndex = -1;
-        bool wasPressed;
+        readonly Dictionary<int, bool> previousPressState = new();
         int activeSourceId = int.MinValue;
         bool rightPinching;
         bool leftPinching;
@@ -236,6 +238,10 @@ namespace BCSignVR
         readonly List<PointerCandidate> candidates = new(5);
         readonly PointerVisual[] pointerVisuals = new PointerVisual[5];
         readonly Dictionary<int, Ray> smoothedRays = new();
+        readonly HashSet<int> loggedControllerDevices = new();
+        readonly HashSet<int> loggedLegacyControllerDevices = new();
+        int lastInputControllerCount = -1;
+        int lastLegacyControllerCount = -1;
         static readonly InputFeatureUsage<Vector3> PointerPosition = new("pointerPosition");
         static readonly InputFeatureUsage<Quaternion> PointerRotation = new("pointerRotation");
         Transform uiBoard;
@@ -413,10 +419,13 @@ namespace BCSignVR
             if (index < 0 || index >= pointerVisuals.Length) return;
             var visual = pointerVisuals[index];
             if (visual == null) return;
-            // The cursor is deliberately quiet while the user is making a
-            // sign or waiting for tracking. It appears only over a real
-            // selectable control.
-            if (candidate.target == null) return;
+            // Keep the cursor quiet during sign practice, but let a controller
+            // (or an intentional hand pinch) show its aim point anywhere on
+            // the board. Requiring a button hit here hid the cursor precisely
+            // when the learner needed it to aim at a button.
+            var hasAimPoint = candidate.target != null || candidate.hasVisualPoint &&
+                (IsControllerSource(candidate.sourceId) || candidate.pressed || candidate.sourceId == 0);
+            if (!hasAimPoint) return;
             var ray = candidate.ray;
             var end = candidate.targetHit.collider != null ? candidate.targetHit.point :
                 candidate.hasVisualPoint ? candidate.visualPoint : ray.origin + ray.direction * candidate.maxLength;
@@ -479,21 +488,16 @@ namespace BCSignVR
             point = default;
             if (!uiBoard) uiBoard = GameObject.Find("Learning board")?.transform;
             if (!uiBoard) return false;
-            // Keep the idle cursor on the actual learning-board plane. The old
-            // implementation used the nearest arbitrary collider, which made
-            // the dot jump onto the floor, tutor or classroom props whenever a
-            // controller was a few degrees off a button.
+            // Keep the cursor on the actual learning-board plane. Using the
+            // nearest arbitrary collider made it jump onto the floor, tutor or
+            // classroom props whenever a controller was a few degrees off.
             var plane = new Plane(-uiBoard.forward, uiBoard.TransformPoint(new Vector3(0, 0, -.045f)));
             if (!plane.Raycast(ray, out var distance) || distance <= .05f || distance >= maxLength)
                 return false;
 
-            // Keep a non-hovering cursor on the board itself. Without this
-            // clamp, a slightly downward controller aim placed the dot on the
-            // floor behind the board and made selection feel disconnected from
-            // the UI.
             var local = uiBoard.InverseTransformPoint(ray.GetPoint(distance));
-            local.x = Mathf.Clamp(local.x, -3.52f, 3.52f);
-            local.y = Mathf.Clamp(local.y, -2.27f, 2.27f);
+            if (Mathf.Abs(local.x) > 3.6f || Mathf.Abs(local.y) > 2.35f)
+                return false;
             local.z = -.045f;
             point = uiBoard.TransformPoint(local);
             return true;
@@ -514,6 +518,7 @@ namespace BCSignVR
             var pressTarget = default(BoardButton);
             var dwellPressTarget = default(BoardButton);
             var pressed = false;
+            var justPressed = false;
 
             if (!vr)
             {
@@ -546,8 +551,12 @@ namespace BCSignVR
                     next = selected.target;
                     pressTarget = selected.target;
                     pressed = selected.pressed;
+                    previousPressState.TryGetValue(selected.sourceId, out var wasPressed);
+                    justPressed = pressed && !wasPressed;
                     activeSourceId = selected.sourceId;
                 }
+                foreach (var candidate in candidates)
+                    previousPressState[candidate.sourceId] = candidate.pressed;
             }
             if (next != focused) { if (focused) focused.Focus(false); focused = next; if (focused) focused.Focus(true); }
             if (Input.GetKeyDown(KeyCode.Tab))
@@ -571,7 +580,7 @@ namespace BCSignVR
                 var target = focused ?? ButtonAtScreenPoint(camera, mousePosition);
                 if (target) { ResetDwell(); target.Press(); }
             }
-            if (pressed && !wasPressed && pressTarget)
+            if (justPressed && pressTarget)
             {
                 var target = pressTarget;
                 ResetDwell();
@@ -584,7 +593,6 @@ namespace BCSignVR
                 target.Press();
             }
             if (Input.GetKeyDown(KeyCode.Return)) { var target = keyboardFocus ? keyboardFocus : focused; if (target) target.Press(); }
-            wasPressed = pressed;
         }
 
         float UpdateDwell(BoardButton target, int sourceId, out BoardButton pressTarget)
@@ -660,8 +668,37 @@ namespace BCSignVR
                 leftPinching = false;
             }
 
+            // Read Quest Touch Plus directly through its OpenXR Input System
+            // layout first. That layout exposes a real Pointer Pose and named
+            // trigger/A/B controls; relying only on legacy XR device discovery
+            // can leave a perfectly paired controller without a usable ray.
+            var inputLeft = NewInputSystem.GetDevice<NewXRController>(
+                UnityEngine.InputSystem.CommonUsages.LeftHand);
+            var inputRight = NewInputSystem.GetDevice<NewXRController>(
+                UnityEngine.InputSystem.CommonUsages.RightHand);
+            var inputControllerCount = 0;
+            foreach (var inputDevice in NewInputSystem.devices)
+            {
+                if (!(inputDevice is NewXRController inputController)) continue;
+                inputControllerCount++;
+                if (loggedControllerDevices.Add(inputController.deviceId))
+                    Debug.Log($"BCSignVR Input System controller found: {inputController.displayName} ({inputController.name}).");
+            }
+            if (inputControllerCount != lastInputControllerCount)
+            {
+                lastInputControllerCount = inputControllerCount;
+                Debug.Log($"BCSignVR Input System controller count: {inputControllerCount}.");
+            }
+            var inputLeftAdded = TryAddInputSystemController(inputLeft, 1);
+            var inputRightAdded = TryAddInputSystemController(inputRight, 2);
+
             devices.Clear();
             InputDevices.GetDevicesWithCharacteristics(InputDeviceCharacteristics.Controller, devices);
+            if (devices.Count != lastLegacyControllerCount)
+            {
+                lastLegacyControllerCount = devices.Count;
+                Debug.Log($"BCSignVR legacy XR controller count: {devices.Count}.");
+            }
             devices.Sort((a, b) =>
             {
                 var aLeft = (a.characteristics & InputDeviceCharacteristics.Left) != 0;
@@ -672,8 +709,12 @@ namespace BCSignVR
             });
             foreach (var device in devices)
             {
-                if (!TryGetControllerRay(device, out var ray)) continue;
                 var sourceId = (device.characteristics & InputDeviceCharacteristics.Left) != 0 ? 1 : 2;
+                var deviceKey = (device.name ?? string.Empty).GetHashCode() ^ (sourceId << 28);
+                if (loggedLegacyControllerDevices.Add(deviceKey))
+                    Debug.Log($"BCSignVR legacy XR controller found: {device.name}, source {sourceId}, valid={device.isValid}.");
+                if (sourceId == 1 && inputLeftAdded || sourceId == 2 && inputRightAdded) continue;
+                if (!TryGetControllerRay(device, out var ray)) continue;
                 var candidate = new PointerCandidate {
                     ray = StabilizeRay(sourceId, ray),
                     pressed = IsControllerPressed(device),
@@ -721,6 +762,19 @@ namespace BCSignVR
                 if ((candidates[index].sourceId == 4 || candidates[index].sourceId == 3) &&
                     candidates[index].target != null) return index;
 
+            // Once a controller ray reaches the board, keep it as the active
+            // cursor even when it is between buttons. This makes the dot and
+            // five-second countdown discoverable instead of requiring blind
+            // button hunting.
+            for (var index = 0; index < candidates.Count; index++)
+                if (IsControllerSource(candidates[index].sourceId) && candidates[index].hasVisualPoint)
+                    return index;
+
+            // A pinched hand is also an explicit selection gesture; show its
+            // cursor on the board even if the pinch starts between controls.
+            for (var index = 0; index < candidates.Count; index++)
+                if (candidates[index].pressed && candidates[index].hasVisualPoint) return index;
+
             // Preserve the last-used pointer only after giving any currently
             // aimed hand/controller target a chance to take over.
             for (var index = 0; index < candidates.Count; index++)
@@ -732,6 +786,56 @@ namespace BCSignVR
             // Devices are sorted right-hand first, so a fresh controller
             // session starts with the expected dominant-hand pointer.
             return 0;
+        }
+
+        static bool IsControllerSource(int sourceId) => sourceId == 1 || sourceId == 2;
+
+        bool TryAddInputSystemController(NewXRController controller, int sourceId)
+        {
+            if (!TryGetInputSystemControllerRay(controller, out var ray, out var pressed)) return false;
+            var candidate = new PointerCandidate {
+                ray = StabilizeRay(sourceId, ray),
+                pressed = pressed,
+                maxLength = 4.2f,
+                visualIndex = candidates.Count,
+                sourceId = sourceId
+            };
+            ResolveCandidate(ref candidate);
+            candidates.Add(candidate);
+            return true;
+        }
+
+        static bool TryGetInputSystemControllerRay(NewXRController controller, out Ray ray, out bool pressed)
+        {
+            ray = default;
+            pressed = false;
+            if (controller == null || !controller.enabled) return false;
+
+            var tracked = controller.TryGetChildControl<NewButtonControl>("isTracked");
+            if (tracked != null && !tracked.isPressed) return false;
+
+            var positionControl = controller.TryGetChildControl<NewVector3Control>("pointerPosition") ??
+                controller.TryGetChildControl<NewVector3Control>("devicePosition");
+            var rotationControl = controller.TryGetChildControl<NewQuaternionControl>("pointerRotation") ??
+                controller.TryGetChildControl<NewQuaternionControl>("deviceRotation");
+            if (positionControl == null || rotationControl == null) return false;
+
+            var position = positionControl.ReadValue();
+            var rotation = rotationControl.ReadValue();
+            var direction = rotation * Vector3.forward;
+            if (!IsFinite(position) || !IsFinite(direction) || direction.sqrMagnitude < .5f ||
+                !IsValidRotation(rotation) || position.sqrMagnitude < .0001f)
+                return false;
+
+            var triggerPressed = controller.TryGetChildControl<NewButtonControl>("triggerPressed");
+            var triggerAxis = controller.TryGetChildControl<NewAxisControl>("trigger");
+            var primary = controller.TryGetChildControl<NewButtonControl>("primaryButton");
+            var secondary = controller.TryGetChildControl<NewButtonControl>("secondaryButton");
+            pressed = triggerPressed != null && triggerPressed.isPressed ||
+                triggerAxis != null && triggerAxis.ReadValue() > .55f ||
+                primary != null && primary.isPressed || secondary != null && secondary.isPressed;
+            ray = new Ray(position, direction.normalized);
+            return true;
         }
 
         Ray StabilizeRay(int sourceId, Ray raw)
