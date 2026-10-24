@@ -1,6 +1,8 @@
 using BCSignVR;
 using System.Linq;
 using UnityEditor;
+using UnityEditor.Android;
+using UnityEditor.Build;
 using UnityEditor.SceneManagement;
 using UnityEditor.XR.Management;
 using UnityEditor.XR.Management.Metadata;
@@ -18,7 +20,7 @@ namespace BCSignVR.Editor
         public static void Configure()
         {
             PlayerSettings.companyName = "BCSignVR";
-            PlayerSettings.productName = "BCSignVR Standalone";
+            PlayerSettings.productName = "signzzZ";
             PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Standalone, "za.ac.belgiumcampus.bcsignvr");
             PlayerSettings.colorSpace = ColorSpace.Linear;
             PlayerSettings.runInBackground = true;
@@ -77,6 +79,7 @@ namespace BCSignVR.Editor
         public static void BuildQuest()
         {
             ConfigureOpenXR(BuildTargetGroup.Android);
+            ConfigureQuestBranding();
             PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android, "za.ac.belgiumcampus.bcsignvr");
             AssetDatabase.SaveAssets();
             System.IO.Directory.CreateDirectory("Builds/Quest");
@@ -91,6 +94,29 @@ namespace BCSignVR.Editor
             if (report.summary.result != UnityEditor.Build.Reporting.BuildResult.Succeeded)
                 throw new System.Exception($"Quest 3 APK build failed: {report.summary.result}");
             Debug.Log($"BCSignVR Quest 3 APK complete: {report.summary.totalSize} bytes");
+        }
+
+        static void ConfigureQuestBranding()
+        {
+            PlayerSettings.productName = "signzzZ";
+            var icon = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Branding/signzzz-app-icon.png");
+            if (icon == null)
+                throw new System.InvalidOperationException("Quest app icon is missing: Assets/Branding/signzzz-app-icon.png");
+
+            ConfigureAndroidIcon(AndroidPlatformIconKind.Adaptive, icon);
+        }
+
+        static void ConfigureAndroidIcon(PlatformIconKind kind, Texture2D icon)
+        {
+            var target = NamedBuildTarget.Android;
+            var slots = PlayerSettings.GetPlatformIcons(target, kind);
+            if (slots == null || slots.Length == 0)
+                throw new System.InvalidOperationException($"Unity returned no Android icon slots for {kind}.");
+
+            foreach (var slot in slots)
+                slot.SetTextures(Enumerable.Repeat(icon, slot.maxLayerCount).ToArray());
+
+            PlayerSettings.SetPlatformIcons(target, kind, slots);
         }
 
         static void ConfigureOpenXR(BuildTargetGroup group, bool useMacLoader = false)

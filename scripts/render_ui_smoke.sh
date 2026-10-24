@@ -2,14 +2,14 @@
 set -euo pipefail
 
 PROJECT_ROOT="${0:A:h:h}"
-APP="$PROJECT_ROOT/unity/Builds/macOS/BCSignVR.app/Contents/MacOS/BCSignVR Standalone"
+APP="$PROJECT_ROOT/unity/Builds/macOS/BCSignVR.app/Contents/MacOS/signzzZ"
 if [[ ! -x "$APP" ]]; then
   print -u2 "Mac build not found: $APP"
   exit 1
 fi
 
 output_dir="$(mktemp -d /tmp/bcsignvr-ui.XXXXXX)"
-pages=(greeting fingerspell alphabet alphabet-vr tracked-hand-vr practice success progress help input sasl reference sasl-capetown sasl-bloemfontein sasl-pretoria)
+pages=(profiles add-profile greeting fingerspell alphabet alphabet-vr tracked-hand-vr practice success progress help input sasl reference sasl-capetown sasl-bloemfontein sasl-pretoria)
 for letter in {a..z}; do pages+=("alphabet-$letter"); done
 for page in $pages; do
   output="$output_dir/$page.png"

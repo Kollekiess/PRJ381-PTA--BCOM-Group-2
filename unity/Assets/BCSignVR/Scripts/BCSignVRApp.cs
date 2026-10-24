@@ -10,7 +10,18 @@ namespace BCSignVR
     public sealed class BCSignVRApp : MonoBehaviour
     {
         public enum InputMode { Camera, VR, Demo }
-        enum Page { Home, Practice, Results, Progress, Help, Sasl, Input, SaslPractice, Alphabet, Basics, Fingerspell }
+        enum Page { Profiles, AddProfile, Home, Practice, Results, Progress, Help, Sasl, Input, SaslPractice, Alphabet, Basics, Fingerspell }
+        const int ProfilesPerPage = 5;
+        static readonly Vector2[] ProfileCardPositions =
+        {
+            new(-2.12f, -.16f), new(0f, -.16f), new(2.12f, -.16f),
+            new(-2.12f, -1.42f), new(0f, -1.42f), new(2.12f, -1.42f)
+        };
+        static readonly Color[] ProfileAvatarColors =
+        {
+            new(.15f, .52f, .76f), new(.33f, .62f, .48f), new(.72f, .43f, .33f),
+            new(.51f, .43f, .72f), new(.82f, .58f, .23f), new(.28f, .62f, .66f)
+        };
         static readonly string[] LessonIds = { "prototype-open", "prototype-fist", "prototype-point" };
         static readonly string[] Titles = { "Open your hand", "Make a gentle fist", "Point your index finger" };
         static readonly string[] Labels = { "DEMO_OPEN", "DEMO_FIST", "DEMO_POINT" };
@@ -27,6 +38,8 @@ namespace BCSignVR
         readonly List<float> sessionScores = new();
         WebcamHandPoseProvider webcam;
         LocalSessionStore history;
+        LearnerProfileStore profileStore;
+        LearnerProfile activeProfile;
         SaslReferenceLibrary references;
         readonly HandPoseFrame researchReference = new();
         int researchIndex;
@@ -37,10 +50,12 @@ namespace BCSignVR
         Transform presentationRoot;
         Transform classroomRoot;
         Transform chalkboardFrame;
+        Transform navigationRoot;
         Transform controlsFooter;
         Camera learnerCamera;
         TextMesh connectionText, feedbackText, detailsText, matchText, trackingText, demoPoseText;
         TextMesh successCountdown;
+        TextMesh profileNamePreview, profileFormStatus;
         Transform successPrompt;
         Transform successModalRoot;
         Transform progressFill;
@@ -65,6 +80,9 @@ namespace BCSignVR
         bool preview;
         bool vrClassroomPlaced;
         bool questInputDefaulted;
+        int profilePage;
+        string profileNameDraft = "";
+        TouchScreenKeyboard profileKeyboard;
         TutorAvatar tutor;
         int alphabetIndex;
         int alphabetMistakes;
@@ -99,15 +117,18 @@ namespace BCSignVR
             tutor = FindFirstObjectByType<TutorAvatar>();
             BuildCamera();
             floatingHands = new FloatingHandsView();
-            history = new LocalSessionStore();
+            profileStore = new LearnerProfileStore();
             references = new SaslReferenceLibrary();
             webcam = new WebcamHandPoseProvider();
             for (var i = 0; i < Labels.Length; i++)
                 evaluator.AddTemplate(Labels[i], SimulatedHandPoseProvider.Template((SimulatedHandPoseProvider.DemoPose)i));
             BuildShell();
             CreatePresentationRoot();
-            ShowHome();
-            StartCoroutine(ConnectBackend());
+            if (preview)
+            {
+                SelectProfile(profileStore.Profiles[0], connectBackend: false);
+            }
+            else ShowProfiles();
             if (preview) StartCoroutine(CapturePreview(Environment.GetEnvironmentVariable("BCSIGNVR_SCREENSHOT")));
         }
 
@@ -122,10 +143,13 @@ namespace BCSignVR
             connectionText = ClassroomUi.Label("Connecting...", board, 3.08f, 1.90f, .125f,
                 ClassroomUi.Muted, TextAnchor.MiddleRight, 2.6f);
             ClassroomUi.Panel("Header divider", board, new Vector3(0, 1.40f, -.025f), new Vector2(6.30f, .012f), ClassroomUi.Line, .006f);
-            ClassroomUi.Button("Classroom", board, -2.40f, 1.10f, 1.42f, ShowHome);
-            ClassroomUi.Button("Explore signs", board, -.84f, 1.10f, 1.42f, ShowSasl);
-            ClassroomUi.Button("My progress", board, .80f, 1.10f, 1.50f, ShowProgress);
-            ClassroomUi.Button("?  Help", board, 2.42f, 1.10f, 1.15f, ShowHelp);
+            navigationRoot = new GameObject("Learner navigation").transform;
+            navigationRoot.SetParent(board, false);
+            ClassroomUi.Button("Classroom", navigationRoot, -2.48f, 1.10f, 1.20f, ShowHome);
+            ClassroomUi.Button("Explore", navigationRoot, -1.22f, 1.10f, 1.20f, ShowSasl);
+            ClassroomUi.Button("Progress", navigationRoot, .02f, 1.10f, 1.20f, ShowProgress);
+            ClassroomUi.Button("Switch user", navigationRoot, 1.30f, 1.10f, 1.30f, ShowProfiles);
+            ClassroomUi.Button("?  Help", navigationRoot, 2.65f, 1.10f, .90f, ShowHelp);
             controlsFooter = new GameObject("Comfort and controls").transform;
             controlsFooter.position = new Vector3(.65f, .04f, 4.5f);
             ClassroomUi.Label("Click to choose  /  Tab + Enter  /  VR: aim + trigger, pinch, or dwell", controlsFooter,
@@ -250,11 +274,15 @@ namespace BCSignVR
 
         void ShowHome()
         {
+            if (activeProfile == null) { ShowProfiles(); return; }
+            navigationRoot.gameObject.SetActive(true);
             BeginPage(Page.Home);
             tutor?.Say("Welcome! Let's learn one hand shape at a time.", true);
+            ClassroomUi.Label($"LEARNER  /  {activeProfile.displayName}", content, 3.05f, .68f, .12f,
+                ClassroomUi.DeepBlue, TextAnchor.MiddleRight, 2.25f);
             ClassroomUi.Label("A little practice.\nA new way to connect.", content, -3.08f, .28f, .31f,
                 ClassroomUi.Ink, TextAnchor.MiddleLeft, 3.85f);
-            ClassroomUi.Label("Welcome to your signing classroom.\nWatch Bob's example, then try it at your pace.",
+            ClassroomUi.Label($"Welcome to your signing classroom, {activeProfile.displayName}.\nWatch Bob's example, then try it at your pace.",
                 content, -3.06f, -.34f, .155f, ClassroomUi.Muted, TextAnchor.MiddleLeft, 3.85f);
             var tile = ClassroomUi.Panel("Warm-up lesson", content, new Vector3(-1.05f, -1.13f, 0),
                 new Vector2(4.05f, .85f), new Color(.94f, .98f, 1f), .15f, true).transform;
@@ -273,6 +301,165 @@ namespace BCSignVR
             ClassroomUi.Button(ModeName(), content, 2.13f, -1.82f, 1.95f, CycleMode);
             ClassroomUi.Label(inputMode == InputMode.VR ? "Quest: controller trigger, hand pinch, or 5s dwell." : "Camera mode uses the computer camera.",
                 content, 2.13f, -2.14f, .105f, ClassroomUi.Muted, TextAnchor.MiddleCenter, 1.95f);
+        }
+
+        void ShowProfiles()
+        {
+            if (navigationRoot != null) navigationRoot.gameObject.SetActive(false);
+            BeginPage(Page.Profiles);
+            profileKeyboard = null;
+            if (connectionText != null)
+            {
+                connectionText.text = "Choose a learner";
+                connectionText.color = ClassroomUi.Muted.linear;
+            }
+            var profiles = profileStore.Profiles;
+            var pageCount = Mathf.Max(1, Mathf.CeilToInt(profiles.Count / (float)ProfilesPerPage));
+            profilePage = Mathf.Clamp(profilePage, 0, pageCount - 1);
+            ClassroomUi.Label("Who's practising today?", content, 0, .86f, .31f,
+                ClassroomUi.Ink, TextAnchor.MiddleCenter, 6.2f);
+            ClassroomUi.Label("Choose a learner to open your signing classroom.", content, 0, .62f, .145f,
+                ClassroomUi.Muted, TextAnchor.MiddleCenter, 5.8f);
+
+            var first = profilePage * ProfilesPerPage;
+            var visibleCount = Mathf.Min(ProfilesPerPage, profiles.Count - first);
+            for (var index = 0; index < visibleCount; index++)
+            {
+                var position = visibleCount == 1
+                    ? new Vector2(-1.06f, ProfileCardPositions[0].y)
+                    : ProfileCardPositions[index];
+                DrawProfileCard(profiles[first + index], position.x, position.y);
+            }
+
+            // Keep a permanent add tile on every page, just like a streaming
+            // service's profile chooser. Existing learners are never displaced.
+            var addPosition = visibleCount == 1
+                ? new Vector2(1.06f, ProfileCardPositions[0].y)
+                : ProfileCardPositions[visibleCount];
+            DrawAddProfileCard(addPosition.x, addPosition.y);
+            if (profilePage > 0)
+                ClassroomUi.Button("<  Previous", content, -2.28f, -2.22f, 1.55f,
+                    () => { profilePage--; ShowProfiles(); }, height: .20f);
+            if (profilePage + 1 < pageCount)
+                ClassroomUi.Button("More learners  >", content, 2.28f, -2.22f, 1.75f,
+                    () => { profilePage++; ShowProfiles(); }, height: .20f);
+        }
+
+        void DrawProfileCard(LearnerProfile profile, float x, float y)
+        {
+            var card = ClassroomUi.Panel("Learner profile " + profile.displayName, content,
+                new Vector3(x, y, -.03f), new Vector2(1.28f, 1.28f), ClassroomUi.Paper, .14f, true);
+            var name = ClassroomUi.Label(profile.displayName, card.transform, 0, -.43f, .14f,
+                ClassroomUi.DeepBlue, TextAnchor.MiddleCenter, 1.12f);
+            var avatar = ClassroomUi.Panel("Profile avatar", card.transform, new Vector3(0, .16f, -.035f),
+                new Vector2(.72f, .72f), ProfileAvatarColors[profile.avatarIndex], .12f, true,
+                ProfileAvatarColors[profile.avatarIndex]);
+            ClassroomUi.Label(profile.displayName.Substring(0, 1).ToUpperInvariant(), avatar.transform,
+                0, 0, .27f, Color.white, TextAnchor.MiddleCenter);
+            var button = card.AddComponent<BoardButton>();
+            button.Initialize(() => SelectProfile(profile), false, name);
+            var collider = card.AddComponent<BoxCollider>();
+            collider.size = new Vector3(1.38f, 1.38f, .18f);
+        }
+
+        void DrawAddProfileCard(float x, float y)
+        {
+            var card = ClassroomUi.Panel("Add learner profile", content, new Vector3(x, y, -.03f),
+                new Vector2(1.28f, 1.28f), new Color(.95f, .98f, 1f), .14f, true, ClassroomUi.Blue);
+            ClassroomUi.Label("+", card.transform, 0, .16f, .42f, ClassroomUi.Blue, TextAnchor.MiddleCenter);
+            var label = ClassroomUi.Label("Add user", card.transform, 0, -.43f, .14f,
+                ClassroomUi.DeepBlue, TextAnchor.MiddleCenter, 1.12f);
+            card.AddComponent<BoardButton>().Initialize(ShowAddProfile, false, label);
+            var collider = card.AddComponent<BoxCollider>();
+            collider.size = new Vector3(1.38f, 1.38f, .18f);
+        }
+
+        void ShowAddProfile()
+        {
+            if (navigationRoot != null) navigationRoot.gameObject.SetActive(false);
+            BeginPage(Page.AddProfile);
+            profileNameDraft = "";
+            profileKeyboard = null;
+            if (connectionText != null)
+            {
+                connectionText.text = "New learner";
+                connectionText.color = ClassroomUi.Muted.linear;
+            }
+            ClassroomUi.Label("Add a learner", content, 0, .77f, .31f,
+                ClassroomUi.Ink, TextAnchor.MiddleCenter, 5.8f);
+            ClassroomUi.Label("Give this profile a name. Their practice stays separate on this headset.",
+                content, 0, .41f, .14f, ClassroomUi.Muted, TextAnchor.MiddleCenter, 5.9f);
+            var entry = ClassroomUi.Panel("Learner name entry", content, new Vector3(0, -.27f, 0),
+                new Vector2(4.25f, .72f), new Color(.96f, .99f, 1f), .14f, true).transform;
+            profileNamePreview = ClassroomUi.Label("Tap Enter name to type on the Quest keyboard", entry,
+                0, 0, .17f, ClassroomUi.Muted, TextAnchor.MiddleCenter, 3.95f);
+            profileFormStatus = ClassroomUi.Label("", content, 0, -.89f, .125f,
+                ClassroomUi.Muted, TextAnchor.MiddleCenter, 5.2f);
+            ClassroomUi.Button("Enter name", content, -1.24f, -1.50f, 1.85f, OpenProfileKeyboard, height: .40f);
+            ClassroomUi.Button("Create and continue  >", content, 1.16f, -1.50f, 2.15f,
+                CreateProfileFromForm, true, height: .40f);
+            ClassroomUi.Button("Back to profiles", content, 0, -2.05f, 1.85f,
+                ShowProfiles, height: .34f);
+        }
+
+        void OpenProfileKeyboard()
+        {
+            if (!TouchScreenKeyboard.isSupported)
+            {
+                if (profileFormStatus != null) profileFormStatus.text = "The system keyboard is not available on this device.";
+                return;
+            }
+            profileKeyboard = TouchScreenKeyboard.Open(profileNameDraft, TouchScreenKeyboardType.Default,
+                false, false, false, false, "Learner name", 28);
+        }
+
+        void UpdateProfileKeyboard()
+        {
+            if (profileKeyboard == null) return;
+            profileNameDraft = profileKeyboard.text ?? "";
+            if (profileNamePreview != null)
+            {
+                profileNamePreview.text = string.IsNullOrWhiteSpace(profileNameDraft)
+                    ? "Type a learner name" : profileNameDraft;
+                profileNamePreview.color = string.IsNullOrWhiteSpace(profileNameDraft)
+                    ? ClassroomUi.Muted : ClassroomUi.DeepBlue;
+            }
+            if (profileKeyboard.status == TouchScreenKeyboard.Status.Done ||
+                profileKeyboard.status == TouchScreenKeyboard.Status.Canceled)
+                profileKeyboard = null;
+        }
+
+        void CreateProfileFromForm()
+        {
+            var name = string.IsNullOrWhiteSpace(profileNameDraft)
+                ? $"Learner {profileStore.Profiles.Count + 1}" : profileNameDraft.Trim();
+            try
+            {
+                var profile = profileStore.Add(name);
+                profilePage = (profileStore.Profiles.Count - 1) / ProfilesPerPage;
+                SelectProfile(profile);
+            }
+            catch (Exception error)
+            {
+                if (profileFormStatus != null) profileFormStatus.text = error.Message;
+            }
+        }
+
+        void SelectProfile(LearnerProfile profile, bool connectBackend = true)
+        {
+            activeProfile = profile;
+            profileKeyboard = null;
+            history = new LocalSessionStore(profile.id == LearnerProfileStore.DefaultProfileId
+                ? null
+                : System.IO.Path.Combine(Application.persistentDataPath, "profiles", profile.id, "sessions.json"));
+            token = null;
+            apiConnected = false;
+            remoteProgressLoaded = false;
+            remoteCompleted = 0;
+            remoteAverage = 0;
+            if (navigationRoot != null) navigationRoot.gameObject.SetActive(true);
+            ShowHome();
+            if (connectBackend && !preview) StartCoroutine(ConnectBackend());
         }
 
         void ShowAlphabet(int index)
@@ -735,7 +922,13 @@ namespace BCSignVR
 
         void Update()
         {
-            if (Input.GetKeyDown(KeyCode.Escape)) ShowHome();
+            UpdateProfileKeyboard();
+            if (Input.GetKeyDown(KeyCode.Escape))
+            {
+                if (page == Page.AddProfile) ShowProfiles();
+                else if (page != Page.Profiles) ShowHome();
+            }
+            if (page == Page.Profiles || page == Page.AddProfile) return;
             if (page == Page.Alphabet) { UpdateAlphabet(); return; }
             if (page == Page.Basics) { UpdateBasics(); return; }
             if (page == Page.Fingerspell) { UpdateFingerspell(); return; }
@@ -1131,8 +1324,15 @@ namespace BCSignVR
 
         IEnumerator ConnectBackend()
         {
-            var email = $"demo-{SystemInfo.deviceUniqueIdentifier}@local.bcsignvr";
-            var payload = JsonUtility.ToJson(new AuthRequest { name = "Local Learner", email = email, password = "local-demo-password" });
+            if (activeProfile == null) yield break;
+            var suffix = activeProfile.id == LearnerProfileStore.DefaultProfileId ? "" : "-" + activeProfile.id;
+            var email = $"demo-{SystemInfo.deviceUniqueIdentifier}{suffix}@local.bcsignvr";
+            var payload = JsonUtility.ToJson(new AuthRequest
+            {
+                name = activeProfile.displayName,
+                email = email,
+                password = "local-demo-password"
+            });
             using var register = Request("http://127.0.0.1:8787/api/auth/register", "POST", payload);
             yield return register.SendWebRequest();
             var response = register.downloadHandler.text;
@@ -1198,7 +1398,9 @@ namespace BCSignVR
         IEnumerator CapturePreview(string path)
         {
             var scenario = Environment.GetEnvironmentVariable("BCSIGNVR_PREVIEW_PAGE");
-            if (scenario == "practice" || scenario == "missing")
+            if (scenario == "profiles") ShowProfiles();
+            else if (scenario == "add-profile") ShowAddProfile();
+            else if (scenario == "practice" || scenario == "missing")
             { inputMode = scenario == "missing" ? InputMode.Camera : InputMode.Demo; StartWarmup(); }
             else if (scenario == "help") ShowHelp();
             else if (scenario == "progress") ShowProgress();
