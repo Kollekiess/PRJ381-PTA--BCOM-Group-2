@@ -13,7 +13,7 @@ namespace BCSignVR
 
         public static string Hint(HandPoseFrame current, SimulatedHandPoseProvider.DemoPose target)
         {
-            if (current == null || !current.tracked) return "Show your full hand to the webcam.";
+            if (current == null || !current.tracked) return "Raise your full hand so all fingers can be tracked.";
             var weakest = 1f;
             var hint = "Keep your whole hand visible and hold steady.";
             for (var i = 0; i < FingerStarts.Length; i++)

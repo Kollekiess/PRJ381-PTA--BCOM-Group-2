@@ -189,7 +189,8 @@ namespace BCSignVR
             item.transform.localScale = scale;
             item.transform.localRotation = rotation == default ? Quaternion.identity : rotation;
             item.GetComponent<Renderer>().sharedMaterial = GetMaterial(color);
-            item.GetComponent<Collider>().enabled = false;
+            var collider = item.GetComponent<Collider>();
+            if (collider != null) collider.enabled = false;
             return item;
         }
 
@@ -202,7 +203,8 @@ namespace BCSignVR
             item.transform.localRotation = Quaternion.FromToRotation(Vector3.up, end - start);
             item.transform.localScale = new Vector3(width, Vector3.Distance(start, end) * .5f, width);
             item.GetComponent<Renderer>().sharedMaterial = GetMaterial(color);
-            item.GetComponent<Collider>().enabled = false;
+            var collider = item.GetComponent<Collider>();
+            if (collider != null) collider.enabled = false;
         }
 
         Material GetMaterial(Color color)

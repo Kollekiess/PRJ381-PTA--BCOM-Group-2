@@ -10,6 +10,8 @@ namespace BCSignVR
 
         public bool TryGetRightHand(HandPoseFrame destination)
         {
+            destination.tracked = false;
+            destination.source = DisplayName;
             var subsystem = HandTracking.subsystem;
             if (subsystem == null || !subsystem.running || !subsystem.rightHand.isTracked)
                 return false;
@@ -20,6 +22,8 @@ namespace BCSignVR
                 var jointId = XRHandJointIDUtility.FromIndex(index);
                 if (!hand.GetJoint(jointId).TryGetPose(out var pose))
                     return false;
+                if (!Finite(pose.position) || !Finite(pose.rotation) || QuaternionLengthSquared(pose.rotation) < .0001f)
+                    return false;
                 destination.joints[index] = pose.position;
                 if (index == 0)
                     destination.wristRotation = pose.rotation;
@@ -28,6 +32,20 @@ namespace BCSignVR
             destination.source = DisplayName;
             return true;
         }
+
+        static bool Finite(Vector3 value) =>
+            !float.IsNaN(value.x) && !float.IsInfinity(value.x) &&
+            !float.IsNaN(value.y) && !float.IsInfinity(value.y) &&
+            !float.IsNaN(value.z) && !float.IsInfinity(value.z);
+
+        static bool Finite(Quaternion value) =>
+            !float.IsNaN(value.x) && !float.IsInfinity(value.x) &&
+            !float.IsNaN(value.y) && !float.IsInfinity(value.y) &&
+            !float.IsNaN(value.z) && !float.IsInfinity(value.z) &&
+            !float.IsNaN(value.w) && !float.IsInfinity(value.w);
+
+        static float QuaternionLengthSquared(Quaternion value) =>
+            value.x * value.x + value.y * value.y + value.z * value.z + value.w * value.w;
     }
 }
 

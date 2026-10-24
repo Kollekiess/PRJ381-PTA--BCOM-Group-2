@@ -38,7 +38,7 @@ namespace BCSignVR.Editor
         [MenuItem("BCSignVR/Build macOS Demo")]
         public static void BuildMac()
         {
-            ConfigureOpenXR(BuildTargetGroup.Standalone);
+            ConfigureOpenXR(BuildTargetGroup.Standalone, useMacLoader: true);
             AssetDatabase.SaveAssets();
             System.IO.Directory.CreateDirectory("Builds/macOS");
             var options = new BuildPlayerOptions
@@ -93,7 +93,7 @@ namespace BCSignVR.Editor
             Debug.Log($"BCSignVR Quest 3 APK complete: {report.summary.totalSize} bytes");
         }
 
-        static void ConfigureOpenXR(BuildTargetGroup group)
+        static void ConfigureOpenXR(BuildTargetGroup group, bool useMacLoader = false)
         {
             const string settingsPath = "Assets/XR/XRGeneralSettingsPerBuildTarget.asset";
             var perBuildTarget = AssetDatabase.LoadAssetAtPath<XRGeneralSettingsPerBuildTarget>(settingsPath);
@@ -123,14 +123,32 @@ namespace BCSignVR.Editor
                 ?? OpenXRSettings.GetSettingsForBuildTargetGroup(group);
             var handTracking = settings?.GetFeature<HandTracking>();
             if (handTracking != null) handTracking.enabled = true;
+            if (group == BuildTargetGroup.Android && settings != null)
+            {
+                // These features are required for a normal Quest Android
+                // player. Without them the headset can start passthrough and
+                // an OpenXR session while Unity's stereo camera renders no
+                // application geometry.
+                foreach (var feature in settings.GetFeatures())
+                {
+                    var typeName = feature?.GetType().FullName;
+                    if (typeName == "UnityEngine.XR.OpenXR.Features.MetaQuestSupport.MetaQuestFeature" ||
+                        typeName == "UnityEngine.XR.OpenXR.Features.Interactions.MetaQuestTouchPlusControllerProfile")
+                        feature.enabled = true;
+                    else if (typeName == "UnityEngine.XR.OpenXR.Features.OculusQuestSupport.OculusQuestFeature")
+                        feature.enabled = false;
+                }
+            }
             if (settings != null && group == BuildTargetGroup.Standalone)
             {
                 var serializedSettings = new SerializedObject(settings);
                 var loaderName = serializedSettings.FindProperty("customLoaderName");
                 if (loaderName != null)
                 {
-                    loaderName.stringValue = System.IO.Path.GetFullPath(
-                        "Builds/macOS/BCSignVR.app/Contents/PlugIns/ARM64/libopenxr_loader.dylib");
+                    loaderName.stringValue = useMacLoader
+                        ? System.IO.Path.GetFullPath(
+                            "Builds/macOS/BCSignVR.app/Contents/PlugIns/ARM64/libopenxr_loader.dylib")
+                        : string.Empty;
                     serializedSettings.ApplyModifiedPropertiesWithoutUndo();
                 }
             }

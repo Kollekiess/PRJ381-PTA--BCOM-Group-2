@@ -3,6 +3,12 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.XR;
+using UnityEngine.XR.Hands;
+using UnityEngine.XR.Hands.OpenXR;
+using NewInputSystem = UnityEngine.InputSystem.InputSystem;
+using NewXRController = UnityEngine.InputSystem.XR.XRController;
+using NewVector3Control = UnityEngine.InputSystem.Controls.Vector3Control;
+using NewQuaternionControl = UnityEngine.InputSystem.Controls.QuaternionControl;
 
 namespace BCSignVR
 {
@@ -104,7 +110,10 @@ namespace BCSignVR
             var text = Label(label, root.transform, 0, 0, .17f, primary ? Color.white : DeepBlue,
                 TextAnchor.MiddleCenter, width - .14f);
             button.Initialize(action, primary, text);
-            var collider = root.AddComponent<BoxCollider>(); collider.size = new Vector3(width, height, .08f);
+            // Give the 3D button a small comfort margin. Quest's system UI does
+            // not require a laser to land on a one-pixel edge of a control.
+            var collider = root.AddComponent<BoxCollider>();
+            collider.size = new Vector3(width + .16f, height + .14f, .18f);
             return button;
         }
     }
@@ -158,6 +167,19 @@ namespace BCSignVR
 
     public sealed class BoardPointer : MonoBehaviour
     {
+        struct PointerCandidate
+        {
+            public Ray ray;
+            public BoardButton target;
+            public RaycastHit targetHit;
+            public bool pressed;
+            public float maxLength;
+            public int visualIndex;
+            public int sourceId;
+            public Vector3 visualPoint;
+            public bool hasVisualPoint;
+        }
+
         [StructLayout(LayoutKind.Sequential)]
         struct NativePoint { public double x, y; }
         [StructLayout(LayoutKind.Sequential)]
@@ -181,33 +203,338 @@ namespace BCSignVR
 
         BoardButton focused;
         BoardButton keyboardFocus;
+        BoardButton dwellTarget;
+        int dwellSourceId = int.MinValue;
+        float dwellElapsed;
+        bool dwellFired;
         int selectedIndex = -1;
         bool wasPressed;
+        int activeSourceId = int.MinValue;
+        bool rightPinching;
+        bool leftPinching;
         Vector3 guiMousePosition;
         bool hasGuiMousePosition;
         readonly List<InputDevice> devices = new();
+        readonly List<PointerCandidate> candidates = new(5);
+        readonly PointerVisual[] pointerVisuals = new PointerVisual[5];
+        readonly Dictionary<int, Ray> smoothedRays = new();
+        static readonly InputFeatureUsage<Vector3> PointerPosition = new("pointerPosition");
+        static readonly InputFeatureUsage<Quaternion> PointerRotation = new("pointerRotation");
+        Transform uiBoard;
+
+        sealed class PointerVisual
+        {
+            public LineRenderer line;
+            public LineRenderer dwellTrack;
+            public LineRenderer dwellArc;
+            public Transform reticle;
+            public Renderer reticleRenderer;
+            public Transform center;
+            public Renderer centerRenderer;
+            public Transform[] dwellDots;
+            public Renderer[] dwellDotRenderers;
+        }
+
+        void Awake()
+        {
+            // Keep the visual independent of the camera/board hierarchy. A
+            // world-space pointer must not inherit the camera pose a second
+            // time or it becomes a giant, unstable wedge in stereo rendering.
+            var pointerShader = Resources.Load<Shader>("BCSignVRPointer") ??
+                Shader.Find("BCSignVR/Pointer");
+            uiBoard = GameObject.Find("Learning board")?.transform;
+            for (var index = 0; index < 5; index++)
+            {
+                var pointer = new GameObject($"VR UI pointer {index}");
+                var line = pointer.AddComponent<LineRenderer>();
+                line.useWorldSpace = true;
+                line.positionCount = 2;
+                line.startWidth = .008f;
+                line.endWidth = .003f;
+                line.widthMultiplier = 1f;
+                line.alignment = LineAlignment.View;
+                line.numCapVertices = 4;
+                line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                line.receiveShadows = false;
+                line.sharedMaterial = pointerShader != null
+                    ? new Material(pointerShader)
+                    : ClassroomFactory.Material(ClassroomUi.Blue);
+                line.enabled = false;
+
+                var dwellTrackObject = new GameObject($"VR UI dwell track {index}");
+                dwellTrackObject.transform.SetParent(pointer.transform, false);
+                var dwellTrack = dwellTrackObject.AddComponent<LineRenderer>();
+                dwellTrack.useWorldSpace = true;
+                dwellTrack.positionCount = 41;
+                dwellTrack.startWidth = .009f;
+                dwellTrack.endWidth = .009f;
+                dwellTrack.widthMultiplier = 1f;
+                dwellTrack.alignment = LineAlignment.View;
+                dwellTrack.numCapVertices = 6;
+                dwellTrack.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                dwellTrack.receiveShadows = false;
+                dwellTrack.sharedMaterial = pointerShader != null
+                    ? new Material(pointerShader)
+                    : ClassroomFactory.Material(new Color(.70f, .85f, .91f));
+                dwellTrack.enabled = false;
+
+                var dwellArcObject = new GameObject($"VR UI dwell arc {index}");
+                dwellArcObject.transform.SetParent(pointer.transform, false);
+                var dwellArc = dwellArcObject.AddComponent<LineRenderer>();
+                dwellArc.useWorldSpace = true;
+                dwellArc.positionCount = 2;
+                dwellArc.startWidth = .018f;
+                dwellArc.endWidth = .018f;
+                dwellArc.widthMultiplier = 1f;
+                dwellArc.alignment = LineAlignment.View;
+                dwellArc.numCapVertices = 6;
+                dwellArc.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                dwellArc.receiveShadows = false;
+                dwellArc.sharedMaterial = pointerShader != null
+                    ? new Material(pointerShader)
+                    : ClassroomFactory.Material(ClassroomUi.Green);
+                dwellArc.enabled = false;
+
+                var reticle = new GameObject($"VR UI reticle {index}", typeof(MeshFilter), typeof(MeshRenderer));
+                var reticleMesh = BuildReticleMesh();
+                reticleMesh.RecalculateBounds();
+                reticle.GetComponent<MeshFilter>().sharedMesh = reticleMesh;
+                reticle.GetComponent<MeshRenderer>().sharedMaterial = pointerShader != null
+                    ? new Material(pointerShader)
+                    : ClassroomFactory.Material(ClassroomUi.Blue);
+                reticle.transform.localScale = Vector3.one * .03f;
+                reticle.SetActive(false);
+
+                var center = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                center.name = $"VR UI reticle center {index}";
+                UnityEngine.Object.Destroy(center.GetComponent<Collider>());
+                center.transform.SetParent(reticle.transform, false);
+                center.transform.localScale = Vector3.one * .42f;
+                center.GetComponent<Renderer>().sharedMaterial = pointerShader != null
+                    ? new Material(pointerShader)
+                    : ClassroomFactory.Material(ClassroomUi.Blue);
+
+                // Match the reference cursor: twelve evenly spaced dots,
+                // neutral grey while idle and charcoal as the dwell fills.
+                const int dwellDotCount = 12;
+                var dwellDots = new Transform[dwellDotCount];
+                var dwellDotRenderers = new Renderer[dwellDotCount];
+                for (var dotIndex = 0; dotIndex < dwellDotCount; dotIndex++)
+                {
+                    var dot = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                    dot.name = $"VR UI dwell dot {index} {dotIndex}";
+                    UnityEngine.Object.Destroy(dot.GetComponent<Collider>());
+                    dot.transform.SetParent(pointer.transform, false);
+                    dot.transform.localScale = Vector3.one * .018f;
+                    var dotRenderer = dot.GetComponent<Renderer>();
+                    dotRenderer.sharedMaterial = pointerShader != null
+                        ? new Material(pointerShader)
+                        : ClassroomFactory.Material(new Color(.82f, .82f, .82f));
+                    dot.SetActive(false);
+                    dwellDots[dotIndex] = dot.transform;
+                    dwellDotRenderers[dotIndex] = dotRenderer;
+                }
+                reticle.GetComponent<Renderer>().enabled = false;
+                pointerVisuals[index] = new PointerVisual {
+                    line = line,
+                    dwellTrack = dwellTrack,
+                    reticle = reticle.transform,
+                    reticleRenderer = reticle.GetComponent<Renderer>(),
+                    center = center.transform,
+                    centerRenderer = center.GetComponent<Renderer>(),
+                    dwellDots = dwellDots,
+                    dwellDotRenderers = dwellDotRenderers
+                };
+                pointerVisuals[index].dwellArc = dwellArc;
+            }
+        }
+
+        static Mesh BuildReticleMesh()
+        {
+            const int segments = 24;
+            var vertices = new Vector3[segments * 2];
+            var triangles = new int[segments * 6];
+            for (var index = 0; index < segments; index++)
+            {
+                var angle = index * Mathf.PI * 2f / segments;
+                var direction = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0);
+                vertices[index * 2] = direction * .5f;
+                vertices[index * 2 + 1] = direction * .30f;
+                var next = (index + 1) % segments;
+                var triangle = index * 6;
+                triangles[triangle] = index * 2;
+                triangles[triangle + 1] = next * 2;
+                triangles[triangle + 2] = index * 2 + 1;
+                triangles[triangle + 3] = index * 2 + 1;
+                triangles[triangle + 4] = next * 2;
+                triangles[triangle + 5] = next * 2 + 1;
+            }
+            var mesh = new Mesh { name = "VR UI reticle ring mesh" };
+            mesh.SetVertices(vertices);
+            mesh.SetTriangles(triangles, 0);
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        void HidePointers()
+        {
+            foreach (var visual in pointerVisuals)
+            {
+                if (visual == null) continue;
+                visual.line.enabled = false;
+                visual.dwellTrack.enabled = false;
+                visual.dwellArc.enabled = false;
+                visual.reticle.gameObject.SetActive(false);
+                if (visual.dwellDots != null)
+                    foreach (var dot in visual.dwellDots) if (dot != null) dot.gameObject.SetActive(false);
+            }
+        }
+
+        void ShowPointer(int index, in PointerCandidate candidate, bool selected, float dwellProgress)
+        {
+            if (index < 0 || index >= pointerVisuals.Length) return;
+            var visual = pointerVisuals[index];
+            if (visual == null) return;
+            // The cursor is deliberately quiet while the user is making a
+            // sign or waiting for tracking. It appears only over a real
+            // selectable control.
+            if (candidate.target == null) return;
+            var ray = candidate.ray;
+            var end = candidate.targetHit.collider != null ? candidate.targetHit.point :
+                candidate.hasVisualPoint ? candidate.visualPoint : ray.origin + ray.direction * candidate.maxLength;
+            // The cursor is intentionally neutral. Green belongs to lesson
+            // feedback; it made the selection state look like a status light
+            // instead of the calm Quest-style dwell indicator in the reference.
+            var color = new Color(.08f, .08f, .08f, 1f);
+
+            // Quest's own hand UI uses a compact cursor. A full beam here is
+            // noisy in a classroom and is especially distracting when the
+            // controller is resting on the floor, so keep the beam disabled.
+            visual.line.enabled = false;
+
+            visual.reticle.gameObject.SetActive(true);
+            visual.reticle.position = end + ray.direction * .004f;
+            visual.reticle.rotation = StableReticleRotation(ray.direction);
+            visual.reticle.localScale = Vector3.one * (candidate.target != null ? .074f : .054f);
+            visual.reticleRenderer.sharedMaterial.color = color;
+            visual.centerRenderer.sharedMaterial.color = color;
+            DrawDwellDots(visual, end + ray.direction * .008f, visual.reticle.rotation, dwellProgress);
+        }
+
+        static void DrawDwellDots(PointerVisual visual, Vector3 center, Quaternion rotation, float progress)
+        {
+            if (visual == null || visual.dwellDots == null) return;
+            const int dotCount = 12;
+            const float radius = .070f;
+            var filled = Mathf.Clamp(Mathf.CeilToInt(Mathf.Clamp01(progress) * dotCount), 0, dotCount);
+            for (var index = 0; index < dotCount; index++)
+            {
+                var angle = Mathf.PI * .5f - index / (float)dotCount * Mathf.PI * 2f;
+                var local = new Vector3(Mathf.Cos(angle) * radius, Mathf.Sin(angle) * radius, 0f);
+                var dot = visual.dwellDots[index];
+                dot.position = center + rotation * local;
+                dot.rotation = rotation;
+                dot.localScale = Vector3.one * .018f;
+                visual.dwellDotRenderers[index].sharedMaterial.color = index < filled
+                    ? new Color(.08f, .08f, .08f, 1f) : new Color(.82f, .82f, .82f, 1f);
+                dot.gameObject.SetActive(true);
+            }
+        }
+
+        Quaternion StableReticleRotation(Vector3 direction)
+        {
+            // Keep the spinner in a stable, front-facing view. Orienting it
+            // to the pointer ray made the ring flip and become edge-on as a
+            // hand/controller moved across the board.
+            var camera = Camera.main;
+            if (camera != null)
+                return Quaternion.LookRotation(-camera.transform.forward, camera.transform.up);
+
+            var up = Vector3.ProjectOnPlane(Vector3.up, direction);
+            if (up.sqrMagnitude < .001f) up = Vector3.ProjectOnPlane(transform.up, direction);
+            if (up.sqrMagnitude < .001f) up = Vector3.right;
+            return Quaternion.LookRotation(-direction, up.normalized);
+        }
+
+        bool TryGetUiPoint(Ray ray, float maxLength, out Vector3 point)
+        {
+            point = default;
+            if (!uiBoard) uiBoard = GameObject.Find("Learning board")?.transform;
+            if (!uiBoard) return false;
+            // Keep the idle cursor on the actual learning-board plane. The old
+            // implementation used the nearest arbitrary collider, which made
+            // the dot jump onto the floor, tutor or classroom props whenever a
+            // controller was a few degrees off a button.
+            var plane = new Plane(-uiBoard.forward, uiBoard.TransformPoint(new Vector3(0, 0, -.045f)));
+            if (!plane.Raycast(ray, out var distance) || distance <= .05f || distance >= maxLength)
+                return false;
+
+            // Keep a non-hovering cursor on the board itself. Without this
+            // clamp, a slightly downward controller aim placed the dot on the
+            // floor behind the board and made selection feel disconnected from
+            // the UI.
+            var local = uiBoard.InverseTransformPoint(ray.GetPoint(distance));
+            local.x = Mathf.Clamp(local.x, -3.52f, 3.52f);
+            local.y = Mathf.Clamp(local.y, -2.27f, 2.27f);
+            local.z = -.045f;
+            point = uiBoard.TransformPoint(local);
+            return true;
+        }
+
         void Update()
         {
             var camera = GetComponent<Camera>();
+            if (!camera) return;
             var vr = XRSettings.isDeviceActive;
+            HidePointers();
             // IMGUI reports the cursor in window-local coordinates on macOS,
             // including multi-display setups. Reuse that position for hover
             // and clicks instead of trying to reconstruct it from a global
             // Quartz cursor location.
             var mousePosition = hasGuiMousePosition ? guiMousePosition : DesktopMousePosition();
-            var ray = vr ? new Ray(transform.position, transform.forward) : camera.ScreenPointToRay(mousePosition);
-            BoardButton next = null;
-            // Decorative card meshes can be in front of a button. Search all
-            // hits and pick the nearest button collider instead of assuming the
-            // first hit is interactive.
-            var hits = Physics.RaycastAll(ray, 20f);
-            Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
-            foreach (var hit in hits)
+            var next = default(BoardButton);
+            var pressTarget = default(BoardButton);
+            var dwellPressTarget = default(BoardButton);
+            var pressed = false;
+            var previousFocused = focused;
+
+            if (!vr)
             {
-                next = hit.collider.GetComponentInParent<BoardButton>();
-                if (next) break;
+                var desktopCandidate = new PointerCandidate {
+                    ray = camera.ScreenPointToRay(mousePosition),
+                    maxLength = 20f,
+                    visualIndex = -1,
+                    sourceId = -1
+                };
+                ResolveCandidate(ref desktopCandidate);
+                next = desktopCandidate.target;
+                pressTarget = desktopCandidate.target;
+            }
+            else
+            {
+                BuildVrCandidates();
+                var selectedCandidate = ChooseActiveCandidate();
+
+                if (selectedCandidate >= 0)
+                {
+                    var candidate = candidates[selectedCandidate];
+                    var dwellProgress = UpdateDwell(candidate.target, candidate.sourceId, out dwellPressTarget);
+                    ShowPointer(candidate.visualIndex, in candidate, true, dwellProgress);
+                }
+                else ResetDwell();
+
+                if (selectedCandidate >= 0)
+                {
+                    var selected = candidates[selectedCandidate];
+                    next = selected.target;
+                    pressTarget = selected.target;
+                    pressed = selected.pressed;
+                    activeSourceId = selected.sourceId;
+                }
             }
             if (next != focused) { if (focused) focused.Focus(false); focused = next; if (focused) focused.Focus(true); }
+            if (pressed && !wasPressed && !pressTarget && previousFocused)
+                pressTarget = previousFocused;
             if (Input.GetKeyDown(KeyCode.Tab))
             {
                 var buttons = FindObjectsByType<BoardButton>(FindObjectsSortMode.InstanceID);
@@ -224,26 +551,309 @@ namespace BCSignVR
                     keyboardFocus = buttons[selectedIndex]; if (keyboardFocus) keyboardFocus.Focus(true);
                 }
             }
-            var pressed = false;
-            if (vr)
-            {
-                devices.Clear(); InputDevices.GetDevicesWithCharacteristics(InputDeviceCharacteristics.Controller, devices);
-                foreach (var device in devices)
-                    if (device.TryGetFeatureValue(CommonUsages.triggerButton, out var trigger) && trigger) pressed = true;
-                var hand = UnityEngine.XR.Hands.OpenXR.HandTracking.subsystem;
-                if (hand != null && hand.running && hand.rightHand.isTracked &&
-                    hand.rightHand.GetJoint(UnityEngine.XR.Hands.XRHandJointID.ThumbTip).TryGetPose(out var thumb) &&
-                    hand.rightHand.GetJoint(UnityEngine.XR.Hands.XRHandJointID.IndexTip).TryGetPose(out var index))
-                    pressed |= Vector3.Distance(thumb.position, index.position) < .023f;
-            }
             if (Input.GetMouseButtonDown(0))
             {
                 var target = focused ?? ButtonAtScreenPoint(camera, mousePosition);
-                if (target) target.Press();
+                if (target) { ResetDwell(); target.Press(); }
             }
-            if (pressed && !wasPressed && focused) focused.Press();
+            if (pressed && !wasPressed && pressTarget)
+            {
+                var target = pressTarget;
+                ResetDwell();
+                target.Press();
+            }
+            else if (dwellPressTarget)
+            {
+                var target = dwellPressTarget;
+                ResetDwell();
+                target.Press();
+            }
             if (Input.GetKeyDown(KeyCode.Return)) { var target = keyboardFocus ? keyboardFocus : focused; if (target) target.Press(); }
             wasPressed = pressed;
+        }
+
+        float UpdateDwell(BoardButton target, int sourceId, out BoardButton pressTarget)
+        {
+            pressTarget = null;
+            if (!target || !target.isActiveAndEnabled)
+            {
+                ResetDwell();
+                return 0f;
+            }
+
+            if (target != dwellTarget || sourceId != dwellSourceId)
+            {
+                dwellTarget = target;
+                dwellSourceId = sourceId;
+                dwellElapsed = 0f;
+                dwellFired = false;
+            }
+            else if (!dwellFired)
+            {
+                dwellElapsed += Time.unscaledDeltaTime;
+            }
+
+            const float dwellSeconds = 5f;
+            var progress = Mathf.Clamp01(dwellElapsed / dwellSeconds);
+            if (progress >= 1f && !dwellFired)
+            {
+                dwellFired = true;
+                pressTarget = target;
+            }
+            return progress;
+        }
+
+        void ResetDwell()
+        {
+            dwellTarget = null;
+            dwellSourceId = int.MinValue;
+            dwellElapsed = 0f;
+            dwellFired = false;
+        }
+
+        void BuildVrCandidates()
+        {
+            candidates.Clear();
+
+            // Prefer the tracked index finger when Quest is in hand mode. The
+            // controller devices can remain listed by the runtime for a few
+            // frames after the user puts them down, which previously made the
+            // cursor appear to ignore the user's hand.
+            var handSubsystem = HandTracking.subsystem;
+            if (handSubsystem != null && handSubsystem.running)
+            {
+                if (TryGetHandRay(handSubsystem.rightHand, ref rightPinching, out var rightRay, out var rightPinch))
+                {
+                    var candidate = new PointerCandidate {
+                        ray = StabilizeRay(4, rightRay), pressed = rightPinch, maxLength = 2.4f,
+                        visualIndex = candidates.Count, sourceId = 4
+                    };
+                    ResolveCandidate(ref candidate); candidates.Add(candidate);
+                }
+                if (TryGetHandRay(handSubsystem.leftHand, ref leftPinching, out var leftRay, out var leftPinch))
+                {
+                    var candidate = new PointerCandidate {
+                        ray = StabilizeRay(3, leftRay), pressed = leftPinch, maxLength = 2.4f,
+                        visualIndex = candidates.Count, sourceId = 3
+                    };
+                    ResolveCandidate(ref candidate); candidates.Add(candidate);
+                }
+            }
+            else
+            {
+                rightPinching = false;
+                leftPinching = false;
+            }
+
+            devices.Clear();
+            InputDevices.GetDevicesWithCharacteristics(InputDeviceCharacteristics.Controller, devices);
+            devices.Sort((a, b) =>
+            {
+                var aLeft = (a.characteristics & InputDeviceCharacteristics.Left) != 0;
+                var bLeft = (b.characteristics & InputDeviceCharacteristics.Left) != 0;
+                // Prefer the right hand when neither pointer is over a
+                // control; it is the usual dominant-hand cursor on Quest.
+                return aLeft.CompareTo(bLeft);
+            });
+            foreach (var device in devices)
+            {
+                if (!TryGetControllerRay(device, out var ray)) continue;
+                var sourceId = (device.characteristics & InputDeviceCharacteristics.Left) != 0 ? 1 : 2;
+                var candidate = new PointerCandidate {
+                    ray = StabilizeRay(sourceId, ray),
+                    pressed = IsControllerPressed(device),
+                    maxLength = 2.4f,
+                    visualIndex = candidates.Count,
+                    sourceId = sourceId
+                };
+                ResolveCandidate(ref candidate);
+                candidates.Add(candidate);
+            }
+
+            if (candidates.Count == 0)
+            {
+                var gazeCandidate = new PointerCandidate {
+                    ray = new Ray(transform.position, transform.forward),
+                    maxLength = 2.4f,
+                    visualIndex = 0,
+                    sourceId = 0
+                };
+                ResolveCandidate(ref gazeCandidate);
+                candidates.Add(gazeCandidate);
+            }
+        }
+
+        int ChooseActiveCandidate()
+        {
+            if (candidates.Count == 0) return -1;
+
+            // A deliberate press can hand control to the other hand, even
+            // while the dominant-hand cursor is still visible.
+            for (var index = 0; index < candidates.Count; index++)
+                if (candidates[index].pressed && candidates[index].target != null) return index;
+
+            // Hand tracking is the dominant mode when available. This avoids
+            // an idle controller pose stealing the cursor from the user's
+            // index finger, while a real trigger/pinch above still wins.
+            for (var index = 0; index < candidates.Count; index++)
+                if (candidates[index].sourceId == 4 || candidates[index].sourceId == 3) return index;
+
+            // Once a controller source is chosen, keep it until it disappears.
+            for (var index = 0; index < candidates.Count; index++)
+                if (candidates[index].sourceId == activeSourceId) return index;
+
+            // Devices are sorted right-hand first, so a fresh session starts
+            // with the expected dominant-hand pointer.
+            return 0;
+        }
+
+        Ray StabilizeRay(int sourceId, Ray raw)
+        {
+            if (!smoothedRays.TryGetValue(sourceId, out var previous))
+            {
+                smoothedRays[sourceId] = raw;
+                return raw;
+            }
+            var response = sourceId == 3 || sourceId == 4 ? 12f : 19f;
+            var blend = 1f - Mathf.Exp(-response * Mathf.Max(Time.unscaledDeltaTime, .001f));
+            var origin = Vector3.Lerp(previous.origin, raw.origin, blend);
+            var direction = Vector3.Slerp(previous.direction, raw.direction, blend).normalized;
+            var result = new Ray(origin, direction);
+            smoothedRays[sourceId] = result;
+            return result;
+        }
+
+        void ResolveCandidate(ref PointerCandidate candidate)
+        {
+            candidate.target = FindButton(candidate.ray, out candidate.targetHit);
+            if (candidate.target == null)
+            {
+                candidate.hasVisualPoint = TryGetUiPoint(candidate.ray, candidate.maxLength, out candidate.visualPoint);
+                // If a tracked index finger is temporarily parallel to the
+                // board, keep the cursor usable by falling back to the user's
+                // head aim instead of placing it at an arbitrary far point.
+                if (!candidate.hasVisualPoint && candidate.sourceId != 0)
+                {
+                    var gaze = new Ray(transform.position, transform.forward);
+                    candidate.target = FindButton(gaze, out candidate.targetHit);
+                    if (candidate.target == null)
+                        candidate.hasVisualPoint = TryGetUiPoint(gaze, candidate.maxLength, out candidate.visualPoint);
+                }
+            }
+        }
+
+        static bool IsControllerPressed(InputDevice device)
+        {
+            if (device.TryGetFeatureValue(CommonUsages.triggerButton, out var trigger) && trigger) return true;
+            if (device.TryGetFeatureValue(CommonUsages.trigger, out var triggerAxis) && triggerAxis > .55f) return true;
+            return device.TryGetFeatureValue(CommonUsages.primaryButton, out var primary) && primary;
+        }
+
+        static BoardButton FindButton(Ray ray, out RaycastHit buttonHit)
+        {
+            buttonHit = default;
+            // Decorative card meshes can be in front of a button. Search all
+            // hits and pick the nearest button collider instead of assuming the
+            // first hit is interactive.
+            var hits = Physics.RaycastAll(ray, 20f, ~0, QueryTriggerInteraction.Collide);
+            Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+            foreach (var hit in hits)
+            {
+                var button = hit.collider.GetComponentInParent<BoardButton>();
+                if (button && button.isActiveAndEnabled)
+                {
+                    buttonHit = hit;
+                    return button;
+                }
+            }
+            return null;
+        }
+
+        static bool TryGetControllerRay(InputDevice device, out Ray ray)
+        {
+            ray = default;
+            if (!device.isValid) return false;
+
+            // Quest exposes a dedicated aim pose for the controller. The
+            // generic device pose is the grip pose and points down along the
+            // handle, which makes a ray appear to aim at the floor instead of
+            // following the controller's laser pointer.
+            var position = Vector3.zero;
+            var rotation = Quaternion.identity;
+            var hasAimPose = TryGetInputSystemAimPose(device, out position, out rotation) ||
+                device.TryGetFeatureValue(PointerPosition, out position) &&
+                device.TryGetFeatureValue(PointerRotation, out rotation) &&
+                position.sqrMagnitude > .0001f;
+            if (!hasAimPose &&
+                (!device.TryGetFeatureValue(CommonUsages.devicePosition, out position) ||
+                 !device.TryGetFeatureValue(CommonUsages.deviceRotation, out rotation)))
+                return false;
+            if (device.TryGetFeatureValue(CommonUsages.isTracked, out var tracked) && !tracked) return false;
+            var direction = rotation * Vector3.forward;
+            if (!IsFinite(position) || !IsFinite(direction) || direction.sqrMagnitude < .5f) return false;
+            ray = new Ray(position, direction.normalized);
+            return true;
+        }
+
+        static bool TryGetInputSystemAimPose(InputDevice legacyDevice, out Vector3 position, out Quaternion rotation)
+        {
+            position = Vector3.zero;
+            rotation = Quaternion.identity;
+            var usage = (legacyDevice.characteristics & InputDeviceCharacteristics.Left) != 0
+                ? UnityEngine.InputSystem.CommonUsages.LeftHand
+                : UnityEngine.InputSystem.CommonUsages.RightHand;
+            var controller = NewInputSystem.GetDevice<NewXRController>(usage);
+            if (controller == null) return false;
+            var pointerPosition = controller.TryGetChildControl<NewVector3Control>("pointerPosition");
+            var pointerRotation = controller.TryGetChildControl<NewQuaternionControl>("pointerRotation");
+            if (pointerPosition == null || pointerRotation == null) return false;
+            position = pointerPosition.ReadValue();
+            rotation = pointerRotation.ReadValue();
+            return IsFinite(position) && IsValidRotation(rotation) && position.sqrMagnitude > .0001f;
+        }
+
+        static bool TryGetHandRay(XRHand hand, ref bool pinchState, out Ray ray, out bool pinching)
+        {
+            ray = default;
+            pinching = false;
+            if (!hand.isTracked) { pinchState = false; return false; }
+            var hasIndexBase = hand.GetJoint(XRHandJointID.IndexProximal).TryGetPose(out var indexBase);
+            if (!hasIndexBase)
+                hasIndexBase = hand.GetJoint(XRHandJointID.IndexMetacarpal).TryGetPose(out indexBase);
+            if (!hasIndexBase || !hand.GetJoint(XRHandJointID.IndexTip).TryGetPose(out var tip))
+                return false;
+            var direction = tip.position - indexBase.position;
+            if (direction.sqrMagnitude < .0001f) return false;
+            // Keep the cursor tied to the visible index finger. Quest's
+            // optional hand-aim pose can be reported in a different space on
+            // some runtimes, which makes the cursor jump when pinching.
+            ray = new Ray(tip.position + direction.normalized * .008f, direction.normalized);
+            if (hand.GetJoint(XRHandJointID.ThumbTip).TryGetPose(out var thumb))
+            {
+                var distance = Vector3.Distance(thumb.position, tip.position);
+                // Hysteresis prevents a noisy frame at the pinch threshold
+                // from making the pointer repeatedly press/release.
+                if (!pinchState) pinchState = distance < .028f;
+                else if (distance > .045f) pinchState = false;
+                pinching = pinchState;
+            }
+            else pinchState = false;
+            return true;
+        }
+
+        static bool IsFinite(Vector3 value) =>
+            !float.IsNaN(value.x) && !float.IsInfinity(value.x) &&
+            !float.IsNaN(value.y) && !float.IsInfinity(value.y) &&
+            !float.IsNaN(value.z) && !float.IsInfinity(value.z);
+
+        static bool IsValidRotation(Quaternion value)
+        {
+            if (float.IsNaN(value.x) || float.IsInfinity(value.x) ||
+                float.IsNaN(value.y) || float.IsInfinity(value.y) ||
+                float.IsNaN(value.z) || float.IsInfinity(value.z) ||
+                float.IsNaN(value.w) || float.IsInfinity(value.w)) return false;
+            var length = value.x * value.x + value.y * value.y + value.z * value.z + value.w * value.w;
+            return length > .5f;
         }
 
         // Some macOS window configurations deliver the native mouse event to

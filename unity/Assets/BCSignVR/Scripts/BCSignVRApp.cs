@@ -22,6 +22,7 @@ namespace BCSignVR
         readonly GestureEvaluator evaluator = new();
         readonly SimulatedHandPoseProvider simulated = new();
         readonly OpenXRHandPoseProvider openXr = new();
+        FloatingHandsView floatingHands;
         readonly List<float> sessionScores = new();
         WebcamHandPoseProvider webcam;
         LocalSessionStore history;
@@ -32,6 +33,11 @@ namespace BCSignVR
         bool slowReplay;
         Transform board;
         Transform content;
+        Transform presentationRoot;
+        Transform classroomRoot;
+        Transform chalkboardFrame;
+        Transform controlsFooter;
+        Camera learnerCamera;
         TextMesh connectionText, feedbackText, detailsText, matchText, trackingText, demoPoseText;
         TextMesh successCountdown;
         Transform successPrompt;
@@ -50,12 +56,13 @@ namespace BCSignVR
         bool lessonCompleted, syncing, savingFailed;
         float successDeadline;
         float successMatch;
-        string token, saveStatus = "Saved on this Mac";
+        string token, saveStatus = "Progress saved";
         bool apiConnected;
         bool remoteProgressLoaded;
         int remoteCompleted;
         float remoteAverage;
         bool preview;
+        bool questInputDefaulted;
         TutorAvatar tutor;
         int alphabetIndex;
         int alphabetMistakes;
@@ -73,15 +80,23 @@ namespace BCSignVR
             QualitySettings.antiAliasing = 8;
             QualitySettings.anisotropicFiltering = AnisotropicFiltering.ForceEnable;
             preview = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("BCSIGNVR_SCREENSHOT"));
+            if (!preview && XRSettings.isDeviceActive)
+            {
+                inputMode = InputMode.VR;
+                questInputDefaulted = true;
+            }
             ClassroomFactory.Build();
+            classroomRoot = GameObject.Find("Sign Club Classroom")?.transform;
             tutor = FindFirstObjectByType<TutorAvatar>();
             BuildCamera();
+            floatingHands = new FloatingHandsView();
             history = new LocalSessionStore();
             references = new SaslReferenceLibrary();
             webcam = new WebcamHandPoseProvider();
             for (var i = 0; i < Labels.Length; i++)
                 evaluator.AddTemplate(Labels[i], SimulatedHandPoseProvider.Template((SimulatedHandPoseProvider.DemoPose)i));
             BuildShell();
+            CreatePresentationRoot();
             ShowHome();
             StartCoroutine(ConnectBackend());
             if (preview) StartCoroutine(CapturePreview(Environment.GetEnvironmentVariable("BCSIGNVR_SCREENSHOT")));
@@ -89,8 +104,8 @@ namespace BCSignVR
 
         void BuildShell()
         {
-            ClassroomUi.Panel("Chalkboard frame", null, new Vector3(.65f, 2.65f, 4.96f),
-                new Vector2(7.55f, 5.05f), new Color(.13f, .31f, .25f), .28f, true);
+            chalkboardFrame = ClassroomUi.Panel("Chalkboard frame", null, new Vector3(.65f, 2.65f, 4.96f),
+                new Vector2(7.55f, 5.05f), new Color(.13f, .31f, .25f), .28f, true).transform;
             board = ClassroomUi.Panel("Learning board", null, new Vector3(.65f, 2.65f, 4.9f),
                 new Vector2(7.2f, 4.7f), Color.white, .26f, true).transform;
             ClassroomUi.Label("BC sign club", board, -3.13f, 1.92f, .28f, ClassroomUi.DeepBlue);
@@ -102,10 +117,52 @@ namespace BCSignVR
             ClassroomUi.Button("Explore signs", board, -.84f, 1.10f, 1.42f, ShowSasl);
             ClassroomUi.Button("My progress", board, .76f, 1.10f, 1.52f, ShowProgress);
             ClassroomUi.Button("?  Help", board, 2.56f, 1.10f, 1.12f, ShowHelp);
-            var footer = new GameObject("Comfort and controls").transform;
-            footer.position = new Vector3(.65f, .04f, 4.5f);
-            ClassroomUi.Label("Click to choose  /  Tab + Enter  /  VR: look at a button and pinch", footer,
+            controlsFooter = new GameObject("Comfort and controls").transform;
+            controlsFooter.position = new Vector3(.65f, .04f, 4.5f);
+            ClassroomUi.Label("Click to choose  /  Tab + Enter  /  VR: look at a button and pinch", controlsFooter,
                 0, 0, .12f, ClassroomUi.Muted, TextAnchor.MiddleCenter, 7.3f);
+        }
+
+        void CreatePresentationRoot()
+        {
+            presentationRoot = new GameObject("BCSignVR Presentation Root").transform;
+            presentationRoot.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+            presentationRoot.localScale = Vector3.one;
+            if (classroomRoot != null) classroomRoot.SetParent(presentationRoot, true);
+            if (chalkboardFrame != null) chalkboardFrame.SetParent(presentationRoot, true);
+            if (board != null) board.SetParent(presentationRoot, true);
+            if (controlsFooter != null) controlsFooter.SetParent(presentationRoot, true);
+        }
+
+        void PlaceVrClassroom()
+        {
+            if (presentationRoot == null || board == null || learnerCamera == null) return;
+
+            var forward = Vector3.ProjectOnPlane(learnerCamera.transform.forward, Vector3.up);
+            if (forward.sqrMagnitude < .001f) forward = Vector3.forward;
+            forward.Normalize();
+
+            // The authored classroom is intentionally spacious for the desktop
+            // view. In a headset, anchor and scale that same scene relative to
+            // the current tracking space so it cannot load metres away or above
+            // the learner after moving the project between computers.
+            const float scale = .36f;
+            var boardCenter = learnerCamera.transform.position + forward * 2.35f;
+            // Quest can report a floor-relative tracking origin (y = 0) while
+            // the eye pose is applied internally by OpenXR. Keep the board at
+            // eye height in that mode so the classroom is not below the view.
+            var eyeHeight = learnerCamera.transform.position.y;
+            if (eyeHeight < .5f) eyeHeight = 1.60f;
+            boardCenter.y = eyeHeight - .08f;
+            var boardLocalPosition = board.localPosition;
+            var rotation = Quaternion.LookRotation(forward, Vector3.up);
+
+            presentationRoot.SetPositionAndRotation(Vector3.zero, rotation);
+            presentationRoot.localScale = Vector3.one * scale;
+            presentationRoot.position = boardCenter - rotation * Vector3.Scale(boardLocalPosition, presentationRoot.localScale);
+            if (controlsFooter != null) controlsFooter.gameObject.SetActive(false);
+
+            Debug.Log($"BCSignVR VR classroom anchored {boardCenter} at {scale:0.00} scale.");
         }
 
         void BeginPage(Page next)
@@ -148,7 +205,10 @@ namespace BCSignVR
             var renderer = learnerHandPicture.GetComponent<Renderer>();
             if (texture != null && renderer != null && renderer.sharedMaterial.mainTexture != texture)
                 renderer.sharedMaterial.mainTexture = texture;
-            learnerHandPicture.SetActive(current.tracked);
+            // On Quest the live Bob-styled landmark hand takes over the card
+            // once tracking is valid. Keep the illustrated pose visible as a
+            // calm placeholder while the headset is still acquiring the hand.
+            learnerHandPicture.SetActive(liveView == null || !current.tracked);
         }
 
         void ShowHome()
@@ -174,7 +234,8 @@ namespace BCSignVR
             ClassroomUi.Button("Preview greeting", handCard, 0, -.64f, 1.58f, ShowGreeting, height: .31f);
             ClassroomUi.Label("Choose your input", content, 1.23f, -1.43f, .13f, ClassroomUi.Muted);
             ClassroomUi.Button(ModeName(), content, 2.13f, -1.82f, 1.95f, CycleMode);
-            ClassroomUi.Label("Camera stays on your Mac.", content, 2.13f, -2.14f, .105f, ClassroomUi.Muted, TextAnchor.MiddleCenter, 1.95f);
+            ClassroomUi.Label(inputMode == InputMode.VR ? "Quest hands + pinch to choose." : "Camera mode uses the computer camera.",
+                content, 2.13f, -2.14f, .105f, ClassroomUi.Muted, TextAnchor.MiddleCenter, 1.95f);
         }
 
         void ShowAlphabet(int index)
@@ -214,15 +275,18 @@ namespace BCSignVR
                     // some glyphs use almost the full transparent texture bounds.
                     new Vector3(0, -.08f, -.12f), new Vector2(1.24f, 1.24f));
             trackingText = ClassroomUi.Label("TRACKED HAND  /  RIGHT", learner, -1.17f, .51f, .105f, ClassroomUi.Green, maxWidth: 2.55f);
-            if (inputMode == InputMode.Camera || inputMode == InputMode.Demo)
-                CreateLearnerHandPicture(learner, new Vector3(0, -.08f, -.12f), new Vector2(1.24f, 1.24f), "CartoonHand" + letter);
-            else
-                liveView = new HandSkeletonView("Alphabet learner hand", content, new Color(.93f, .68f, .57f), true);
+            // Keep the board card in the same illustrated language as Bob.
+            // Quest still supplies the live hand landmarks for validation and
+            // FloatingHandsView shows the actual tracked hand in the room.
+            CreateLearnerHandPicture(learner, new Vector3(0, -.08f, -.12f), new Vector2(1.24f, 1.24f), "CartoonHand" + letter);
+            if (inputMode == InputMode.VR)
+                liveView = new HandSkeletonView("Alphabet learner hand", content, new Color(.97f, .73f, .57f), true);
             alphabetStatus = ClassroomUi.Label("Show Bob your RIGHT hand to begin.", content, -3.05f, -1.64f, .15f,
                 ClassroomUi.Ink, maxWidth: 5.25f);
             ClassroomUi.Button("<  Previous", content, -2.42f, -2.08f, 1.35f,
                 () => ShowAlphabet(Mathf.Max(0, alphabetIndex - 1)), height: .35f);
-            ClassroomUi.Button("Camera warm-up", content, -.67f, -2.08f, 1.65f, StartWarmup, height: .35f);
+            ClassroomUi.Button(inputMode == InputMode.Camera ? "Camera warm-up" : "Start warm-up",
+                content, -.67f, -2.08f, 1.65f, StartWarmup, height: .35f);
             ClassroomUi.Button(alphabetIndex == 25 ? "Finish alphabet" : "Practised  /  next  >", content,
                 1.75f, -2.08f, 2.15f, RecordAlphabetAndNext, true, .35f);
             ClassroomUi.Label("Reference: National Institute for the Deaf", content, 3.05f, -1.72f, .09f,
@@ -236,7 +300,7 @@ namespace BCSignVR
             TryGetInputHand(current);
             webcamPreview?.SetBase64(inputMode == InputMode.Camera ? webcam.PreviewJpeg : "");
             if (liveView != null)
-                liveView.SetPose(current, content.TransformPoint(new Vector3(1.67f, -1.19f, -.20f)),
+                liveView.SetLearnerPose(current, content.TransformPoint(new Vector3(1.67f, -1.19f, -.20f)),
                     Quaternion.Euler(0, 180, 0), .90f);
             UpdateLearnerHandPicture("CartoonHand" + letter);
             trackingText.text = current.tracked ? inputMode == InputMode.Demo ? "YOUR DEMO HAND  /  RIGHT" : inputMode == InputMode.Camera ? WebcamHandLabel() : "YOUR VR HAND  /  RIGHT  /  LIVE" : inputMode == InputMode.Camera && !webcam.IsReceiving ?
@@ -284,7 +348,7 @@ namespace BCSignVR
                     // webcam match is a scored attempt and must enter the upload
                     // queue so the seeded alphabet lesson can be recorded.
                     synced = false, inputSource = accuracy > 0 ? "webcam-sasl-research" : "reference" });
-                saveStatus = "Alphabet practice saved on this Mac";
+                saveStatus = "Alphabet practice saved";
                 if (apiConnected) StartCoroutine(SyncPending());
             }
             catch (Exception error) { Debug.LogWarning(error.Message); }
@@ -327,10 +391,9 @@ namespace BCSignVR
             MovementDemoView.Create("Bob animated greeting", "CartoonHandGreeting", "greeting", example,
                 new Vector3(0, -.13f, -.05f), new Vector2(1.22f, 1.06f));
             trackingText = ClassroomUi.Label("TRACKED HAND  /  RIGHT", learner, -1.17f, .52f, .095f, ClassroomUi.Green, maxWidth: 2.55f);
-            if (inputMode == InputMode.Camera || inputMode == InputMode.Demo)
-                CreateLearnerHandPicture(learner, new Vector3(0, -.13f, -.05f), new Vector2(1.22f, 1.06f), "CartoonHandGreeting");
-            else
-                liveView = new HandSkeletonView("Greeting learner hand", content, new Color(.93f, .68f, .57f), true);
+            CreateLearnerHandPicture(learner, new Vector3(0, -.13f, -.05f), new Vector2(1.22f, 1.06f), "CartoonHandGreeting");
+            if (inputMode == InputMode.VR)
+                liveView = new HandSkeletonView("Greeting learner hand", content, new Color(.97f, .73f, .57f), true);
             alphabetStatus = ClassroomUi.Label("Show your RIGHT hand and copy the greeting movement.", content,
                 -3.05f, -1.64f, .15f, ClassroomUi.Ink, maxWidth: 4.5f);
             ClassroomUi.Button("<  Classroom", content, -2.45f, -2.08f, 1.35f, ShowHome, height: .35f);
@@ -381,10 +444,9 @@ namespace BCSignVR
                 ClassroomUi.Picture("Bob cartoon fingerspell hand", "CartoonHand" + letter, example,
                     new Vector3(0, -.05f, -.12f), new Vector2(1.24f, 1.24f));
             trackingText = ClassroomUi.Label("TRACKED HAND  /  RIGHT", learner, -1.17f, .51f, .105f, ClassroomUi.Green, maxWidth: 2.55f);
-            if (inputMode == InputMode.Camera || inputMode == InputMode.Demo)
-                CreateLearnerHandPicture(learner, new Vector3(0, -.05f, -.12f), new Vector2(1.24f, 1.24f), "CartoonHand" + letter);
-            else
-                liveView = new HandSkeletonView("Phrase learner hand", content, new Color(.93f, .68f, .57f), true);
+            CreateLearnerHandPicture(learner, new Vector3(0, -.05f, -.12f), new Vector2(1.24f, 1.24f), "CartoonHand" + letter);
+            if (inputMode == InputMode.VR)
+                liveView = new HandSkeletonView("Phrase learner hand", content, new Color(.97f, .73f, .57f), true);
             alphabetStatus = ClassroomUi.Label($"Show the handshape for {letter}.", content, -3.05f, -1.64f, .15f,
                 ClassroomUi.Ink, maxWidth: 6.1f);
             ClassroomUi.Button("<  Greeting", content, -2.45f, -2.08f, 1.45f, ShowGreeting, height: .35f);
@@ -399,7 +461,7 @@ namespace BCSignVR
             TryGetInputHand(current);
             webcamPreview?.SetBase64(inputMode == InputMode.Camera ? webcam.PreviewJpeg : "");
             if (liveView != null)
-                liveView.SetPose(current, content.TransformPoint(new Vector3(1.67f, -1.19f, -.20f)),
+                liveView.SetLearnerPose(current, content.TransformPoint(new Vector3(1.67f, -1.19f, -.20f)),
                     Quaternion.Euler(0, 180, 0), .90f);
             UpdateLearnerHandPicture("CartoonHand" + fingerspellLetters[fingerspellIndex]);
             trackingText.text = current.tracked ? inputMode == InputMode.Camera ? WebcamHandLabel() : "YOUR HAND  /  RIGHT  /  LIVE" :
@@ -462,7 +524,7 @@ namespace BCSignVR
                     accuracy = Mathf.Clamp01(average), durationSeconds = Mathf.Max(0, Time.time - fingerspellStarted),
                     mistakes = fingerspellMistakes, completed = true, synced = false,
                     inputSource = inputMode == InputMode.Camera ? "webcam-sasl-fingerspelling" : inputMode == InputMode.VR ? "openxr-fingerspelling" : "demo-fingerspelling" });
-                saveStatus = "Phrase practice saved on this Mac";
+                saveStatus = "Phrase practice saved";
                 if (apiConnected) StartCoroutine(SyncPending());
             }
             catch (Exception error) { savingFailed = true; Debug.LogWarning(error.Message); }
@@ -482,7 +544,7 @@ namespace BCSignVR
             TryGetInputHand(current);
             webcamPreview?.SetBase64(inputMode == InputMode.Camera ? webcam.PreviewJpeg : "");
             if (liveView != null)
-                liveView.SetPose(current, content.TransformPoint(new Vector3(1.67f, -1.18f, -.20f)),
+                liveView.SetLearnerPose(current, content.TransformPoint(new Vector3(1.67f, -1.18f, -.20f)),
                     Quaternion.Euler(0, 180, 0), .90f);
             UpdateLearnerHandPicture("CartoonHandGreeting");
             trackingText.text = current.tracked ? inputMode == InputMode.Demo ? "YOUR DEMO HAND  /  RIGHT" : inputMode == InputMode.Camera ? WebcamHandLabel() : "YOUR VR HAND  /  RIGHT  /  LIVE" : inputMode == InputMode.Camera && !webcam.IsReceiving ?
@@ -492,7 +554,7 @@ namespace BCSignVR
             alphabetStatus.text = reviewedGreeting ? $"Bob recognises the reviewed SASL greeting  /  {webcam.RecognitionConfidence:P0}. You can save a scored attempt."
                 : current.tracked ? "Hand visible. Copy the movement slowly and clearly."
                 : inputMode == InputMode.Camera && !webcam.IsReceiving ? "Camera is not sending frames yet. Allow Camera access." :
-                "Show your RIGHT hand to the webcam.";
+                inputMode == InputMode.Camera ? "Show your RIGHT hand to the webcam." : "Raise your RIGHT hand in front of you.";
             if (reviewedGreeting) tutor?.Say("That matches the reviewed SASL greeting. Nice work!", true);
         }
 
@@ -564,10 +626,10 @@ namespace BCSignVR
             if (inputMode == InputMode.Demo)
                 practiceLearnerPicture = ClassroomUi.Picture("Demo cartoon hand", handTexture, liveCard,
                     new Vector3(0, -.05f, -.06f), new Vector2(1.12f, 1.12f));
-            else if (inputMode == InputMode.Camera)
-                CreateLearnerHandPicture(liveCard, new Vector3(0, -.05f, -.06f), new Vector2(1.12f, 1.12f), handTexture);
             else
-                liveView = new HandSkeletonView("Learner hand", content, new Color(.78f, .53f, .45f), true);
+                CreateLearnerHandPicture(liveCard, new Vector3(0, -.05f, -.06f), new Vector2(1.12f, 1.12f), handTexture);
+            if (inputMode == InputMode.VR)
+                liveView = new HandSkeletonView("Learner hand", content, new Color(.97f, .73f, .57f), true);
             feedbackText = ClassroomUi.Label("Bring your hand into view", content, -3.05f, -1.62f, .18f, ClassroomUi.Ink, maxWidth: 5.25f);
             matchText = ClassroomUi.Label("", content, 3.08f, -1.62f, .16f, ClassroomUi.Green, TextAnchor.MiddleRight);
             var track = ClassroomUi.Panel("Hold progress", content, new Vector3(0, -1.88f, -.02f), new Vector2(6.13f, .045f),
@@ -625,7 +687,7 @@ namespace BCSignVR
             if (targetView != null)
                 targetView.SetPose(target, content.TransformPoint(new Vector3(-1.67f, -1.18f, -.20f)), Quaternion.Euler(0, 180 + angle, 0), .92f);
             if (liveView != null)
-                liveView.SetPose(current, content.TransformPoint(new Vector3(1.67f, -1.18f, -.20f)), Quaternion.Euler(0, 180, 0), .92f);
+                liveView.SetLearnerPose(current, content.TransformPoint(new Vector3(1.67f, -1.18f, -.20f)), Quaternion.Euler(0, 180, 0), .92f);
             var handTexture = lessonIndex == 0 ? "CartoonHandOpen" : lessonIndex == 1 ? "CartoonHandFist" : "CartoonHandPoint";
             UpdateLearnerHandPicture(handTexture);
             var match = PracticeMatch();
@@ -648,6 +710,8 @@ namespace BCSignVR
                     feedbackText.text = correct ? inputMode == InputMode.Demo ? "Ready! Choose Check hand." : "That's it! Hold your hand steady." : PoseHint(lessonIndex);
                     matchText.text = inputMode == InputMode.Camera
                         ? $"{match:P0} shape match  /  hold steady"
+                        : inputMode == InputMode.VR
+                        ? $"{match:P0} Quest joint match  /  hold steady"
                         : $"{match:P0} match";
                 }
             }
@@ -661,6 +725,20 @@ namespace BCSignVR
                 progressFill.localPosition = new Vector3(-3.05f + amount * 3.05f, 0, -.006f);
             }
             if (Input.GetKeyDown(KeyCode.Space)) CheckOrContinue();
+        }
+
+        void LateUpdate()
+        {
+            if (!preview && XRSettings.isDeviceActive && !questInputDefaulted)
+            {
+                questInputDefaulted = true;
+                inputMode = InputMode.VR;
+                if (page == Page.Home) ShowHome();
+            }
+            if (!preview && XRSettings.isDeviceActive)
+                floatingHands?.Update();
+            if (!preview && XRSettings.isDeviceActive && presentationRoot != null && presentationRoot.localScale.x > .99f)
+                PlaceVrClassroom();
         }
 
         string PoseHint(int index) => HandPoseCoach.Hint(current, (SimulatedHandPoseProvider.DemoPose)index);
@@ -719,10 +797,10 @@ namespace BCSignVR
                 history.Add(new LocalSessionRecord { lessonId = LessonIds[lessonIndex], accuracy = match,
                     durationSeconds = Time.time - lessonStarted, mistakes = mistakes, completed = true,
                     inputSource = inputMode == InputMode.Demo ? "demo" : inputMode == InputMode.Camera ? "webcam" : "openxr" });
-                saveStatus = inputMode == InputMode.Demo ? "Demo saved on this Mac" : "Saved on this Mac";
+                saveStatus = inputMode == InputMode.Demo ? "Demo saved" : "Progress saved";
                 if (apiConnected) StartCoroutine(SyncPending());
             }
-            catch (Exception error) { savingFailed = true; saveStatus = "Could not save on this Mac"; Debug.LogWarning(error.Message); }
+            catch (Exception error) { savingFailed = true; saveStatus = "Could not save progress"; Debug.LogWarning(error.Message); }
             UpdateConnectionLabel();
             ShowSuccessPrompt();
         }
@@ -808,14 +886,14 @@ namespace BCSignVR
         {
             BeginPage(Page.Progress);
             ClassroomUi.Label("Your practice, at a glance.", content, -3.06f, .56f, .29f, ClassroomUi.Ink);
-            ClassroomUi.Label(remoteProgressLoaded ? "Saved to your learner account and this Mac." : "Saved here on your Mac; account sync will appear when connected.",
+            ClassroomUi.Label(remoteProgressLoaded ? "Saved to your learner account." : "Progress will sync when connected.",
                 content, -3.06f, .19f, .155f, ClassroomUi.Muted);
             Metric("ACCOUNT COMPLETED", remoteProgressLoaded ? remoteCompleted.ToString() : history.TotalCompleted.ToString(), -2.05f);
             Metric("ACCOUNT AVERAGE", remoteProgressLoaded ? remoteAverage.ToString("P0") : history.TotalCompleted == 0 ? "--" : history.BestAccuracy.ToString("P0"), 0);
             Metric("ALPHABET", history.AlphabetPractisedCount + " / 26", 2.05f);
             ClassroomUi.Label($"Research collection: {history.ResearchPractisedCount} / 3 practised", content,
                 0, -1.27f, .13f, ClassroomUi.Muted, TextAnchor.MiddleCenter, 5.8f);
-            ClassroomUi.Label(history.PendingCount > 0 ? $"{history.PendingCount} results waiting to sync. Your local copy is saved." :
+            ClassroomUi.Label(history.PendingCount > 0 ? $"{history.PendingCount} results waiting to sync." :
                 "Ready when you are. A little practice adds up.", content, 0, -1.54f, .15f, ClassroomUi.Muted, TextAnchor.MiddleCenter, 6f);
             ClassroomUi.Button("Start a warm-up", content, 0, -1.93f, 2.55f, StartWarmup, true);
             if (apiConnected) StartCoroutine(RefreshRemoteProgress());
@@ -825,7 +903,7 @@ namespace BCSignVR
         {
             BeginPage(Page.Help);
             ClassroomUi.Label("Make yourself comfortable.", content, -3.06f, .56f, .29f, ClassroomUi.Ink);
-            HelpRow("01", "Choose an input", "Webcam uses this Mac's camera. VR uses headset hands.\nDemo lets you try everything with the on-screen pose button.", -.02f);
+            HelpRow("01", "Choose an input", "Webcam uses the computer camera. VR uses headset hands.\nDemo lets you try everything with the on-screen pose button.", -.02f);
             HelpRow("02", "Watch, then try", "Keep your full hand in view and use good, even lighting.\nThe blue hand is the example; the green hand is yours.", -.77f);
             HelpRow("03", "You're in control", "Hold a matching pose, or choose Check hand.\nUse Continue when you're ready. Escape returns to the classroom.", -1.52f);
             ClassroomUi.Button("Got it", content, 2.37f, -2.11f, 1.4f, ShowHome, true, .34f);
@@ -856,7 +934,9 @@ namespace BCSignVR
                 ClassroomUi.Label("Reference movement", tile, 0, -.01f, .10f, ClassroomUi.Muted, TextAnchor.MiddleCenter);
                 ClassroomUi.Button("Watch sign  >", tile, 0, -.35f, 1.57f, () => ShowResearchPractice(selected), height: .30f);
             }
-            trackingText = ClassroomUi.Label("Show your RIGHT hand to the webcam to see a research prediction.", content,
+            trackingText = ClassroomUi.Label(inputMode == InputMode.Camera ?
+                "Show your RIGHT hand to the webcam to see a research prediction." :
+                "Choose a sign to watch it, then try it with your Quest hand.", content,
                 0, -1.79f, .155f, ClassroomUi.Ink, TextAnchor.MiddleCenter, 6.1f);
             ClassroomUi.Label("Source: University of the Free State  /  CC BY-NC-SA 4.0", content,
                 0, -2.13f, .11f, ClassroomUi.Muted, TextAnchor.MiddleCenter);
@@ -880,10 +960,9 @@ namespace BCSignVR
             // Play the attributed research landmark sequence on the board,
             // using the same Bob-style hand renderer as the learner card.
             targetView = new HandSkeletonView("Bob research example hand", content, new Color(.97f, .73f, .57f), true);
-            if (inputMode == InputMode.Camera || inputMode == InputMode.Demo)
-                CreateLearnerHandPicture(learner, new Vector3(0, -.05f, -.12f), new Vector2(1.24f, 1.24f), "CartoonHandOpen");
-            else
-                liveView = new HandSkeletonView("Research learner hand", content, new Color(.93f, .68f, .57f), true);
+            CreateLearnerHandPicture(learner, new Vector3(0, -.05f, -.12f), new Vector2(1.24f, 1.24f), "CartoonHandOpen");
+            if (inputMode == InputMode.VR)
+                liveView = new HandSkeletonView("Research learner hand", content, new Color(.97f, .73f, .57f), true);
             feedbackText = ClassroomUi.Label("Try the movement at your pace.", content, -3.05f, -1.61f, .16f, ClassroomUi.Ink, maxWidth: 6.1f);
             ClassroomUi.Button("<  Collection", content, -2.35f, -2.05f, 1.5f, ShowSasl, height: .35f);
             ClassroomUi.Button("Replay", content, -.65f, -2.05f, 1.25f, () => researchStarted = Time.time, height: .35f);
@@ -907,7 +986,7 @@ namespace BCSignVR
                     durationSeconds = Mathf.Max(0, Time.time - researchStarted), mistakes = 0, completed = true,
                     synced = false, inputSource = inputMode == InputMode.Camera ? "webcam-research-visual-practice" :
                         inputMode == InputMode.VR ? "openxr-research-visual-practice" : "demo-research-visual-practice" });
-                saveStatus = "Research practice saved on this Mac";
+                saveStatus = "Research practice saved";
                 if (apiConnected) StartCoroutine(SyncPending());
                 tutor?.Say("Research practice saved. Regional signs can vary, so keep comparing the reference.", true);
                 ShowSasl();
@@ -926,11 +1005,12 @@ namespace BCSignVR
             current.tracked = false; TryGetInputHand(current);
             webcamPreview?.SetBase64(inputMode == InputMode.Camera ? webcam.PreviewJpeg : "");
             if (liveView != null)
-                liveView.SetPose(current, content.TransformPoint(new Vector3(1.67f, -1.15f, -.20f)), Quaternion.Euler(0, 180, 0), .87f);
+                liveView.SetLearnerPose(current, content.TransformPoint(new Vector3(1.67f, -1.15f, -.20f)), Quaternion.Euler(0, 180, 0), .87f);
             UpdateLearnerHandPicture("CartoonHandOpen");
             trackingText.text = current.tracked ? inputMode == InputMode.Demo ? "YOUR DEMO HAND  /  RIGHT" : inputMode == InputMode.Camera ? WebcamHandLabel() : "YOUR VR HAND  /  RIGHT  /  LIVE" : inputMode == InputMode.Camera && !webcam.IsReceiving ? "CAMERA  /  WAITING  /  RIGHT HAND" :
                 "YOUR HAND  /  NOT VISIBLE";
-            feedbackText.text = !current.tracked ? "Show your RIGHT hand to the webcam to try the movement." :
+            feedbackText.text = !current.tracked ? inputMode == InputMode.Camera ?
+                "Show your RIGHT hand to the webcam to try the movement." : "Raise your RIGHT hand to try the movement." :
                 inputMode == InputMode.Camera && webcam.RecognizedLabel == references.Label(researchIndex) ? $"Similar movement detected  /  similarity {webcam.RecognitionConfidence:P0}" :
                 "Watch the shape and direction, then try the movement again.";
         }
@@ -960,10 +1040,17 @@ namespace BCSignVR
             var item = new GameObject("Learner camera"); item.tag = "MainCamera";
             item.transform.position = new Vector3(0, 1.85f, -2.6f);
             var camera = item.AddComponent<Camera>(); camera.nearClipPlane = .03f; camera.farClipPlane = 50;
-            camera.fieldOfView = 50f; camera.backgroundColor = ClassroomFactory.Sky;
+            camera.enabled = true;
+            camera.stereoTargetEye = StereoTargetEyeMask.Both;
+            camera.cullingMask = ~0;
+            learnerCamera = camera;
+            if (!XRSettings.isDeviceActive) camera.fieldOfView = 50f;
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            camera.backgroundColor = ClassroomFactory.Sky;
             item.AddComponent<AudioListener>(); item.AddComponent<DesktopCameraController>();
             item.AddComponent<BoardPointer>(); item.AddComponent<HeadPoseDriver>();
             item.AddComponent<MacOpenXRBootstrap>();
+            Debug.Log($"BCSignVR camera created: enabled={camera.enabled}, stereo={camera.stereoTargetEye}, cullingMask={camera.cullingMask}");
         }
 
         IEnumerator ConnectBackend()
@@ -1019,7 +1106,7 @@ namespace BCSignVR
                 request.SetRequestHeader("Authorization", $"Bearer {token}");
                 yield return request.SendWebRequest();
                 if (request.result != UnityWebRequest.Result.Success) { apiConnected = false; break; }
-                try { history.MarkSynced(record.id); saveStatus = "Saved on this Mac and synced"; }
+                try { history.MarkSynced(record.id); saveStatus = "Progress saved and synced"; }
                 catch (Exception error) { Debug.LogWarning(error.Message); break; }
             }
             syncing = false; UpdateConnectionLabel();
@@ -1028,7 +1115,7 @@ namespace BCSignVR
         void UpdateConnectionLabel()
         {
             if (connectionText == null) return;
-            connectionText.text = savingFailed ? "Save needs attention" : apiConnected && history.PendingCount == 0 ? "Progress sync ready" : "Progress saved on this Mac";
+            connectionText.text = savingFailed ? "Save needs attention" : apiConnected && history.PendingCount == 0 ? "Progress sync ready" : "Progress saved";
             connectionText.color = (savingFailed ? ClassroomFactory.Coral : ClassroomUi.Muted).linear;
         }
 
@@ -1087,16 +1174,15 @@ namespace BCSignVR
         [Serializable] sealed class ProgressSummary { public int completed; public float averageAccuracy; }
     }
 
+    [DefaultExecutionOrder(-100)]
     public sealed class HeadPoseDriver : MonoBehaviour
     {
-        Vector3 origin;
-        void Awake() => origin = transform.position;
         void LateUpdate()
         {
             if (!XRSettings.isDeviceActive) return;
             var head = InputDevices.GetDeviceAtXRNode(XRNode.Head);
             if (head.TryGetFeatureValue(CommonUsages.devicePosition, out var position))
-                transform.position = new Vector3(origin.x, 0, origin.z) + position;
+                transform.position = position;
             if (head.TryGetFeatureValue(CommonUsages.deviceRotation, out var rotation)) transform.rotation = rotation;
         }
     }

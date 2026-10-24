@@ -8,6 +8,7 @@ unity/[Ll]ogs/
 unity/[Uu]ser[Ss]ettings/
 unity/MemoryCaptures/
 unity/Recordings/
+unity/.utmp/
 unity/*.csproj
 unity/*.sln*
 

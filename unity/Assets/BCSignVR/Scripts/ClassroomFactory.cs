@@ -79,14 +79,22 @@ namespace BCSignVR
 
         public static Material Material(Color color)
         {
-            var shader = Resources.Load<Shader>("BCSignVRUnlit") ?? Shader.Find("BCSignVR/UnlitColor");
+            // Unity's built-in unlit shader is the safest material path for
+            // Quest Vulkan and supports single-pass stereo without custom
+            // shader variants. Keep the bundled shader as a desktop/fallback
+            // option for environments where the built-in shader is unavailable.
+            var shader = Shader.Find("Unlit/Color") ??
+                Resources.Load<Shader>("BCSignVRUnlit") ?? Shader.Find("BCSignVR/UnlitColor");
+            if (shader == null)
+                shader = Resources.Load<Shader>("BCSignVRSoftLit") ?? Shader.Find("BCSignVR/SoftLit");
             if (shader == null) throw new System.InvalidOperationException("Bundled BCSignVR shader was not found.");
             return new Material(shader) { color = color };
         }
 
         public static Material LitMaterial(Color color)
         {
-            var shader = Resources.Load<Shader>("BCSignVRSoftLit");
+            var shader = Shader.Find("Unlit/Color") ?? Resources.Load<Shader>("BCSignVRUnlit") ??
+                Resources.Load<Shader>("BCSignVRSoftLit");
             return shader == null ? Material(color) : new Material(shader) { color = color };
         }
     }
