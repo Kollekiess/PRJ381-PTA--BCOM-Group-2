@@ -220,6 +220,16 @@ namespace BCSignVR
         void UpdateLearnerHandPicture(string fallbackTexture)
         {
             if (learnerHandPicture == null) return;
+            // In Quest mode this card represents the learner, not the target
+            // sign. Never substitute Bob's static example for a missing hand:
+            // HandSkeletonView owns the card and hides itself when OpenXR loses
+            // tracking, so the preview is visible only for a genuinely tracked pose.
+            if (inputMode == InputMode.VR)
+            {
+                learnerHandPicture.SetActive(false);
+                return;
+            }
+
             var textureName = fallbackTexture;
             var recognized = webcam?.RecognizedLabel ?? "";
             if (recognized.StartsWith("TEAM_SASL_", StringComparison.Ordinal) && recognized.Length == 11)
@@ -233,9 +243,8 @@ namespace BCSignVR
             var renderer = learnerHandPicture.GetComponent<Renderer>();
             if (texture != null && renderer != null && renderer.sharedMaterial.mainTexture != texture)
                 renderer.sharedMaterial.mainTexture = texture;
-            // On Quest the live Bob-styled landmark hand takes over the card
-            // once tracking is valid. Keep the illustrated pose visible as a
-            // calm placeholder while the headset is still acquiring the hand.
+            // Non-VR modes retain their illustrated fallback. Quest mode is
+            // handled above and shows only the tracked landmark hand.
             learnerHandPicture.SetActive(liveView == null || !current.tracked);
         }
 
@@ -1195,6 +1204,10 @@ namespace BCSignVR
             else if (scenario == "progress") ShowProgress();
             else if (scenario == "sasl") ShowSasl();
             else if (scenario == "reference") ShowResearchPractice(0);
+            else if (scenario == "sasl-capetown") { inputMode = InputMode.VR; ShowResearchPractice(0); }
+            else if (scenario == "sasl-bloemfontein") { inputMode = InputMode.VR; ShowResearchPractice(1); }
+            else if (scenario == "sasl-pretoria") { inputMode = InputMode.VR; ShowResearchPractice(2); }
+            else if (scenario == "tracked-hand-vr") { inputMode = InputMode.VR; ShowAlphabet(1); }
             else if (scenario == "input") CycleMode();
             else if (scenario == "alphabet") ShowAlphabet(0);
             else if (scenario == "alphabet-vr") { inputMode = InputMode.VR; ShowAlphabet(1); }

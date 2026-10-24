@@ -54,9 +54,9 @@ namespace BCSignVR
             // Bob's source art uses a warm peach fill, a soft umber contour,
             // and restrained crease/highlight accents. Keeping these surfaces
             // flat and front-facing avoids the old lumpy 3-D capsule look.
-            outlineMaterial = ClassroomFactory.Material(new Color(.57f, .27f, .18f));
+            outlineMaterial = ClassroomFactory.Material(new Color(.35f, .12f, .055f));
             fillMaterial = ClassroomFactory.Material(color);
-            creaseMaterial = ClassroomFactory.Material(new Color(.70f, .38f, .28f));
+            creaseMaterial = ClassroomFactory.Material(new Color(.68f, .32f, .20f));
             highlightMaterial = ClassroomFactory.Material(new Color(.99f, .82f, .67f));
 
             palmOutline = CreateDisc("Bob hand palm contour", outlineMaterial);
