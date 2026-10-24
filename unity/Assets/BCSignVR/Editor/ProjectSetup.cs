@@ -54,6 +54,25 @@ namespace BCSignVR.Editor
             Debug.Log($"BCSignVR macOS build complete: {report.summary.totalSize} bytes");
         }
 
+        [MenuItem("BCSignVR/Build Windows 11 Demo")]
+        public static void BuildWindows()
+        {
+            ConfigureOpenXR(BuildTargetGroup.Standalone);
+            AssetDatabase.SaveAssets();
+            System.IO.Directory.CreateDirectory("Builds/Windows");
+            var options = new BuildPlayerOptions
+            {
+                scenes = new[] { "Assets/Scenes/Classroom.unity" },
+                locationPathName = "Builds/Windows/BCSignVR Standalone.exe",
+                target = BuildTarget.StandaloneWindows64,
+                options = BuildOptions.None
+            };
+            var report = BuildPipeline.BuildPlayer(options);
+            if (report.summary.result != UnityEditor.Build.Reporting.BuildResult.Succeeded)
+                throw new System.Exception($"Windows build failed: {report.summary.result}");
+            Debug.Log($"BCSignVR Windows 11 build complete: {report.summary.totalSize} bytes");
+        }
+
         static void ConfigureOpenXR(BuildTargetGroup group)
         {
             const string settingsPath = "Assets/XR/XRGeneralSettingsPerBuildTarget.asset";

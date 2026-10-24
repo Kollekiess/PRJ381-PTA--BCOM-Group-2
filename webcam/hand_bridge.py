@@ -10,6 +10,7 @@ import math
 import re
 import socket
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -228,6 +229,8 @@ def read_camera_frame(camera, on_missing, *, video=False, max_failures=30, retry
 
 def discover_mac_camera_index() -> int:
     """Prefer the built-in FaceTime camera over Continuity Camera/iPhone devices."""
+    if sys.platform != "darwin":
+        return 0
     try:
         result = subprocess.run(
             ["ffmpeg", "-f", "avfoundation", "-list_devices", "true", "-i", ""],
@@ -318,7 +321,7 @@ def choose_recognition(sequence_result, alphabet_result):
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--camera", default="mac",
-                        help="Camera index, or 'mac' to prefer the built-in FaceTime camera")
+                        help="Camera index, 'mac' for the built-in FaceTime camera, or 'auto' for the first Windows camera")
     parser.add_argument("--video", type=Path, help="Use a video file instead of the live camera")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=5055)
@@ -334,16 +337,22 @@ def main() -> None:
                         "ml/team_sasl/sasl_labels.json")
     args = parser.parse_args()
 
-    mac_camera = not args.video and str(args.camera).lower() in {"mac", "builtin", "built-in", "auto"}
+    camera_name = str(args.camera).lower()
+    explicit_mac_camera = camera_name in {"mac", "builtin", "built-in"}
+    auto_camera = camera_name == "auto"
+    mac_camera = not args.video and sys.platform == "darwin" and (explicit_mac_camera or auto_camera)
     if args.video:
         camera_index = None
     elif mac_camera:
         camera_index = discover_mac_camera_index()
+    elif auto_camera:
+        camera_index = 0
     else:
         camera_index = int(args.camera)
     camera = cv2.VideoCapture(str(args.video)) if args.video else open_camera(camera_index, fallback=not mac_camera)
     if not args.video:
-        print(f"Using Mac camera index {camera_index} (built-in preference)", flush=True)
+        preference = "built-in FaceTime preference" if mac_camera else "automatic first-camera selection"
+        print(f"Using camera index {camera_index} ({preference})", flush=True)
     if camera is None or not camera.isOpened():
         raise SystemExit("Could not open the webcam. Check macOS Camera permission for Terminal/Codex.")
 

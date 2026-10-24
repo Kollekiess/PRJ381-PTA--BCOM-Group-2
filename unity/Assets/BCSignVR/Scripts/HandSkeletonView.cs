@@ -36,15 +36,17 @@ namespace BCSignVR
         {
             root = new GameObject(name).transform;
             root.SetParent(parent, false);
-            // The outline is deliberately a darker peach rather than the old
-            // debug brown/green palette. Some Mac GPUs depth-sort the paired
-            // capsules as one layer, so keeping both layers in Bob's skin
-            // palette guarantees a friendly hand even when the outline wins.
-            outlineMaterial = ClassroomFactory.Material(new Color(.97f, .73f, .57f));
-            // Bob's generated hand uses a warm peach base with a soft apricot
-            // highlight. Keep the live learner hand in the same family.
-            fillMaterial = ClassroomFactory.Material(new Color(.97f, .73f, .57f));
-            highlightMaterial = ClassroomFactory.Material(new Color(1.0f, .84f, .68f));
+            // Match Bob's hand asset: warm peach fill, darker orange-brown
+            // contour, and a soft highlight. The contour is a larger layer
+            // behind the fill so it remains visible on every desktop GPU.
+            var bobPeach = color;
+            outlineMaterial = ClassroomFactory.LitMaterial(new Color(
+                bobPeach.r * .72f, bobPeach.g * .48f, bobPeach.b * .38f));
+            fillMaterial = ClassroomFactory.LitMaterial(bobPeach);
+            highlightMaterial = ClassroomFactory.Material(new Color(
+                Mathf.Min(1f, bobPeach.r + .07f),
+                Mathf.Min(1f, bobPeach.g + .12f),
+                Mathf.Min(1f, bobPeach.b + .10f)));
 
             for (var i = 0; i < joints.Length; i++)
             {
@@ -92,7 +94,7 @@ namespace BCSignVR
             {
                 var a = joints[Bones[i, 0]].localPosition;
                 var b = joints[Bones[i, 1]].localPosition;
-                SetCapsule(boneOutlines[i], a, b, SegmentRadius(i) * .86f, .018f);
+                SetCapsule(boneOutlines[i], a, b, SegmentRadius(i) * 1.18f, .018f);
                 SetCapsule(bones[i], a, b, SegmentRadius(i), -.05f);
             }
 
@@ -109,11 +111,11 @@ namespace BCSignVR
             var fingerSpan = Vector3.Distance(indexBase, littleBase);
             var palmCenter = wristPoint + up * .54f;
             SetOval(palmOutline, palmCenter + Vector3.forward * .018f, horizontal, direction,
-                fingerSpan * .92f + .20f, up.magnitude * .84f + .15f);
+                fingerSpan * .92f + .24f, up.magnitude * .84f + .19f);
             SetOval(palm, palmCenter - Vector3.forward * .05f, horizontal, direction,
                 fingerSpan * .76f + .12f, up.magnitude * .68f + .08f);
             SetOval(wristOutline, wristPoint - direction * .06f + Vector3.forward * .018f,
-                horizontal, direction, .31f, .28f);
+                horizontal, direction, .36f, .33f);
             SetOval(wrist, wristPoint - direction * .06f - Vector3.forward * .05f, horizontal, direction, .27f, .23f);
             SetOval(highlight, palmCenter + horizontal * (fingerSpan * -.16f) + direction * (up.magnitude * .20f),
                 horizontal, direction, .14f, .07f);

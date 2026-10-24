@@ -164,6 +164,12 @@ class CameraReadTests(unittest.TestCase):
             "[AVFoundation indev @ 0x] [1] FaceTime HD Camera\n"))
         self.assertEqual(1, discover_mac_camera_index())
 
+    @patch("hand_bridge.sys.platform", "win32")
+    @patch("hand_bridge.subprocess.run")
+    def test_non_mac_camera_discovery_uses_first_windows_device(self, run):
+        self.assertEqual(0, discover_mac_camera_index())
+        run.assert_not_called()
+
     @patch("hand_bridge.time.sleep")
     def test_transient_failure_reports_loss_and_recovers(self, sleep):
         frame = object()

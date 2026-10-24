@@ -103,6 +103,15 @@ The installed Meta XR Simulator `201.0` supports keyboard/mouse simulated hands.
 
 Install Unity's Android Build Support module, switch the build target to Android, enable OpenXR for Android, and make a development APK. A physical Quest 3 is still required for final optical-hand-tracking and performance validation.
 
+## Run on Windows 11
+
+The Unity project includes a Windows 11 build menu and a Windows launcher for
+Tiaan. On Windows 11, install Unity `6000.6.5f1` with Windows Build Support,
+open the `unity` folder, and choose **BCSignVR → Build Windows 11 Demo**. Then
+double-click `scripts/run_windows_classroom.bat`. The webcam bridge uses the
+first available Windows camera, which is normally the laptop webcam. Python
+3.11+ and the packages in `webcam/requirements.txt` are required.
+
 ## Repository layout
 
 - `unity/` - VR classroom and hand tracking client.

@@ -168,9 +168,10 @@ namespace BCSignVR
             else if (letter == "Z")
                 ClassroomUi.Label("Movement: start with your index finger out, then trace a clear Z in the air.",
                     content, -3.06f, .13f, .105f, ClassroomUi.Blue, maxWidth: 6.1f);
-            var example = ClassroomUi.Panel("Official alphabet reference", content, new Vector3(-1.67f, -.69f, 0),
+            var cardY = letter == "J" || letter == "Z" ? -.75f : -.69f;
+            var example = ClassroomUi.Panel("Official alphabet reference", content, new Vector3(-1.67f, cardY, 0),
                 new Vector2(2.83f, 1.52f), new Color(.94f, .98f, 1f), .16f, true).transform;
-            var learner = ClassroomUi.Panel("Learner camera hand", content, new Vector3(1.67f, -.69f, 0),
+            var learner = ClassroomUi.Panel("Learner camera hand", content, new Vector3(1.67f, cardY, 0),
                 new Vector2(2.83f, 1.52f), new Color(.95f, .98f, .97f), .16f, true).transform;
             ClassroomUi.Label(letter == "J" || letter == "Z" ? "BOB'S EXAMPLE  /  MOVING" : "BOB'S EXAMPLE  /  RIGHT HAND",
                 example, -1.17f, .51f, .105f, ClassroomUi.DeepBlue, maxWidth: 2.55f);
