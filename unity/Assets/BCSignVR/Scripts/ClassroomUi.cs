@@ -18,22 +18,25 @@ namespace BCSignVR
         public static readonly Color DeepBlue = new(.08f, .39f, .60f);
         public static readonly Color Ink = new(.18f, .26f, .33f);
         public static readonly Color Muted = new(.40f, .49f, .55f);
-        public static readonly Color Line = new(.77f, .86f, .90f);
+        public static readonly Color Line = new(.73f, .84f, .89f);
         public static readonly Color Paper = new(.97f, .99f, 1f);
         public static readonly Color Green = new(.10f, .59f, .43f);
 
         public static GameObject Panel(string name, Transform parent, Vector3 center, Vector2 size,
-            Color color, float radius = .15f, bool border = false)
+            Color color, float radius = .15f, bool border = false, Color? borderColor = null)
         {
             var root = new GameObject(name);
             root.transform.SetParent(parent, false);
             root.transform.localPosition = center;
             if (border)
             {
-                Surface("Soft shadow", root.transform, new Vector3(0, -.035f, .025f), size + Vector2.one * .045f,
+                Surface("Soft shadow", root.transform, new Vector3(0, -.025f, .025f), size + Vector2.one * .045f,
                     new Color(.72f, .80f, .84f), radius);
-                Surface("Border", root.transform, Vector3.zero, size, Line, radius);
-                Surface("Face", root.transform, new Vector3(0, 0, -.008f), size - Vector2.one * .025f, color, radius - .01f);
+                Surface("Border", root.transform, Vector3.zero, size, borderColor ?? Line, radius);
+                Surface("Face", root.transform, new Vector3(0, 0, -.010f), size - Vector2.one * .032f,
+                    color, Mathf.Max(.01f, radius - .012f));
+                Surface("Top highlight", root.transform, new Vector3(0, size.y * .5f - .045f, -.014f),
+                    new Vector2(Mathf.Max(.05f, size.x - .22f), .012f), new Color(.84f, .91f, .94f), .006f);
             }
             else Surface("Face", root.transform, Vector3.zero, size, color, radius);
             return root;
@@ -90,6 +93,10 @@ namespace BCSignVR
 
         public static GameObject Picture(string name, string resourceTexture, Transform parent, Vector3 center, Vector2 size)
         {
+            // Keep sign art crisp while giving every still illustration a
+            // consistent soft mounting card and fine border.
+            Panel(name + " illustration mat", parent, center + new Vector3(0, 0, .035f),
+                size * .90f, new Color(.92f, .97f, .995f), .10f, true);
             var item = GameObject.CreatePrimitive(PrimitiveType.Quad);
             item.name = name; item.transform.SetParent(parent, false); item.transform.localPosition = center;
             item.transform.localScale = new Vector3(size.x, size.y, 1);
@@ -105,7 +112,7 @@ namespace BCSignVR
             Action action, bool primary = false, float height = .45f)
         {
             var root = Panel(label, parent, new Vector3(x, y, -.03f), new Vector2(width, height),
-                primary ? Blue : Color.white, .12f, true);
+                primary ? Blue : Color.white, .12f, true, primary ? DeepBlue : Line);
             var button = root.AddComponent<BoardButton>();
             var text = Label(label, root.transform, 0, 0, .17f, primary ? Color.white : DeepBlue,
                 TextAnchor.MiddleCenter, width - .14f);
@@ -136,21 +143,32 @@ namespace BCSignVR
     {
         Action action;
         Color normal;
+        Color normalBorder;
         Renderer face;
+        Renderer border;
+        TextMesh label;
         bool selected;
         float lastPressedAt = -10f;
         public void Initialize(Action callback, bool primary, TextMesh label)
         {
             action = callback; normal = primary ? ClassroomUi.Blue : Color.white;
             face = transform.Find("Face").GetComponent<Renderer>();
+            border = transform.Find("Border").GetComponent<Renderer>();
+            this.label = label;
+            normalBorder = primary ? ClassroomUi.DeepBlue : ClassroomUi.Line;
         }
         public void Focus(bool value)
         {
             if (!this || !gameObject || !transform) return;
             selected = value;
-            if (face != null) face.material.color = value ? Color.Lerp(normal, ClassroomUi.Blue, .22f) : normal;
-            transform.localScale = value ? new Vector3(1.025f, 1.025f, 1) : Vector3.one;
+            if (face != null) face.material.color = value
+                ? Color.Lerp(normal, primaryTint(normal), .16f) : normal;
+            if (border != null) border.material.color = value ? ClassroomUi.Blue : normalBorder;
+            if (label != null) label.color = normal == ClassroomUi.Blue ? Color.white : ClassroomUi.DeepBlue;
+            transform.localScale = value ? new Vector3(1.015f, 1.015f, 1) : Vector3.one;
         }
+        static Color primaryTint(Color color) => color == ClassroomUi.Blue
+            ? new Color(.25f, .67f, .87f) : new Color(.89f, .96f, 1f);
         public void Press()
         {
             if (!isActiveAndEnabled || action == null || Time.unscaledTime - lastPressedAt < .12f) return;

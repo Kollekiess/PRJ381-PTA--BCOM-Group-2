@@ -77,6 +77,11 @@ namespace BCSignVR
         void Awake()
         {
             Application.targetFrameRate = 72;
+            // Avoid Unity's idle timeout while the learner is viewing the
+            // headset externally. Horizon OS can still sleep on its proximity
+            // sensor, which is controlled at device level.
+            Screen.sleepTimeout = SleepTimeout.NeverSleep;
+            Application.runInBackground = true;
             QualitySettings.antiAliasing = 8;
             QualitySettings.anisotropicFiltering = AnisotropicFiltering.ForceEnable;
             preview = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("BCSIGNVR_SCREENSHOT"));
@@ -115,8 +120,8 @@ namespace BCSignVR
             ClassroomUi.Panel("Header divider", board, new Vector3(0, 1.40f, -.025f), new Vector2(6.30f, .012f), ClassroomUi.Line, .006f);
             ClassroomUi.Button("Classroom", board, -2.40f, 1.10f, 1.42f, ShowHome);
             ClassroomUi.Button("Explore signs", board, -.84f, 1.10f, 1.42f, ShowSasl);
-            ClassroomUi.Button("My progress", board, .76f, 1.10f, 1.52f, ShowProgress);
-            ClassroomUi.Button("?  Help", board, 2.56f, 1.10f, 1.12f, ShowHelp);
+            ClassroomUi.Button("My progress", board, .80f, 1.10f, 1.50f, ShowProgress);
+            ClassroomUi.Button("?  Help", board, 2.42f, 1.10f, 1.15f, ShowHelp);
             controlsFooter = new GameObject("Comfort and controls").transform;
             controlsFooter.position = new Vector3(.65f, .04f, 4.5f);
             ClassroomUi.Label("Click to choose  /  Tab + Enter  /  VR: look at a button and pinch", controlsFooter,
@@ -906,12 +911,14 @@ namespace BCSignVR
             BeginPage(Page.Help);
             ClassroomUi.Label("Make yourself comfortable.", content, -3.06f, .56f, .29f, ClassroomUi.Ink);
             HelpRow("01", "Choose an input", "Webcam uses the computer camera. VR uses headset hands.\nDemo lets you try everything with the on-screen pose button.", -.02f);
-            HelpRow("02", "Watch, then try", "Keep your full hand in view and use good, even lighting.\nThe blue hand is the example; the green hand is yours.", -.77f);
-            HelpRow("03", "You're in control", "Hold a matching pose, or choose Check hand.\nUse Continue when you're ready. Escape returns to the classroom.", -1.52f);
+            HelpRow("02", "Watch, then try", "Keep your full hand in view and use good, even lighting.\nThe blue hand is the example; the green hand is yours.", -.70f);
+            HelpRow("03", "You're in control", "Hold a matching pose, or choose Check hand.\nUse Continue when you're ready. Escape returns to the classroom.", -1.38f);
             ClassroomUi.Button("Got it", content, 2.37f, -2.11f, 1.4f, ShowHome, true, .34f);
         }
         void HelpRow(string number, string heading, string body, float y)
         {
+            ClassroomUi.Panel("Help step " + number, content, new Vector3(0, y - .15f, 0),
+                new Vector2(6.12f, .66f), ClassroomUi.Paper, .11f, true);
             ClassroomUi.Label(number, content, -3.03f, y, .22f, ClassroomUi.Blue);
             ClassroomUi.Label(heading, content, -2.48f, y + .06f, .18f, ClassroomUi.Ink);
             ClassroomUi.Label(body, content, -2.48f, y - .25f, .135f, ClassroomUi.Muted, maxWidth: 5.4f);
@@ -922,7 +929,8 @@ namespace BCSignVR
             BeginPage(Page.Sasl);
             ClassroomUi.Label("Explore South African place names.", content, -3.06f, .57f, .27f, ClassroomUi.Ink);
             ClassroomUi.Label("A small SASL research collection, recorded by Deaf signers at UFS.", content, -3.06f, .21f, .145f, ClassroomUi.Muted, maxWidth: 6.2f);
-            ClassroomUi.Panel("Research note", content, new Vector3(0, -.23f, 0), new Vector2(6.16f, .43f), new Color(.94f, .97f, .99f), .10f);
+            ClassroomUi.Panel("Research note", content, new Vector3(0, -.23f, 0), new Vector2(6.16f, .43f),
+                new Color(.94f, .97f, .99f), .10f, true);
             ClassroomUi.Label("Research practice  /  regional variants  /  more review needed for teaching", content,
                 0, -.23f, .12f, ClassroomUi.DeepBlue, TextAnchor.MiddleCenter, 5.9f);
             var names = new[] { "Cape Town", "Bloemfontein", "Pretoria" };
