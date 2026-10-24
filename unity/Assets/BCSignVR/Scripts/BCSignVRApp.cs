@@ -663,6 +663,8 @@ namespace BCSignVR
 
         void Update()
         {
+            if (!preview && XRSettings.isDeviceActive && presentationRoot != null && presentationRoot.localScale.x > .99f)
+                PlaceVrClassroom();
             if (Input.GetKeyDown(KeyCode.Escape)) ShowHome();
             if (page == Page.Alphabet) { UpdateAlphabet(); return; }
             if (page == Page.Basics) { UpdateBasics(); return; }
