@@ -36,13 +36,13 @@ namespace BCSignVR
         {
             root = new GameObject(name).transform;
             root.SetParent(parent, false);
-            // Match Bob's hand asset: warm peach fill, darker orange-brown
-            // contour, and a soft highlight. The contour is a larger layer
-            // behind the fill so it remains visible on every desktop GPU.
+            // Match Bob's hand asset: bright peach fill, a restrained
+            // orange-brown contour, and a soft highlight. Keep the fill
+            // unlit so a reversed camera-facing hand never becomes muddy.
             var bobPeach = color;
-            outlineMaterial = ClassroomFactory.LitMaterial(new Color(
-                bobPeach.r * .72f, bobPeach.g * .48f, bobPeach.b * .38f));
-            fillMaterial = ClassroomFactory.LitMaterial(bobPeach);
+            outlineMaterial = ClassroomFactory.Material(new Color(
+                bobPeach.r * .66f, bobPeach.g * .34f, bobPeach.b * .25f));
+            fillMaterial = ClassroomFactory.Material(bobPeach);
             highlightMaterial = ClassroomFactory.Material(new Color(
                 Mathf.Min(1f, bobPeach.r + .07f),
                 Mathf.Min(1f, bobPeach.g + .12f),
@@ -94,7 +94,7 @@ namespace BCSignVR
             {
                 var a = joints[Bones[i, 0]].localPosition;
                 var b = joints[Bones[i, 1]].localPosition;
-                SetCapsule(boneOutlines[i], a, b, SegmentRadius(i) * 1.18f, .018f);
+                SetCapsule(boneOutlines[i], a, b, SegmentRadius(i) * 1.07f, .018f);
                 SetCapsule(bones[i], a, b, SegmentRadius(i), -.05f);
             }
 
@@ -111,11 +111,11 @@ namespace BCSignVR
             var fingerSpan = Vector3.Distance(indexBase, littleBase);
             var palmCenter = wristPoint + up * .54f;
             SetOval(palmOutline, palmCenter + Vector3.forward * .018f, horizontal, direction,
-                fingerSpan * .92f + .24f, up.magnitude * .84f + .19f);
+                fingerSpan * .84f + .13f, up.magnitude * .76f + .12f);
             SetOval(palm, palmCenter - Vector3.forward * .05f, horizontal, direction,
-                fingerSpan * .76f + .12f, up.magnitude * .68f + .08f);
+                fingerSpan * .79f + .10f, up.magnitude * .71f + .07f);
             SetOval(wristOutline, wristPoint - direction * .06f + Vector3.forward * .018f,
-                horizontal, direction, .36f, .33f);
+                horizontal, direction, .30f, .27f);
             SetOval(wrist, wristPoint - direction * .06f - Vector3.forward * .05f, horizontal, direction, .27f, .23f);
             SetOval(highlight, palmCenter + horizontal * (fingerSpan * -.16f) + direction * (up.magnitude * .20f),
                 horizontal, direction, .14f, .07f);
