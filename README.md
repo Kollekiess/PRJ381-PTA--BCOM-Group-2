@@ -101,7 +101,11 @@ The installed Meta XR Simulator `201.0` supports keyboard/mouse simulated hands.
 
 ## Build for Quest later
 
-Install Unity's Android Build Support module, switch the build target to Android, enable OpenXR for Android, and make a development APK. A physical Quest 3 is still required for final optical-hand-tracking and performance validation.
+Install Unity `6000.6.5f1` with **Android Build Support**, Android SDK/NDK and OpenJDK. Then run `./scripts/build_quest3_apk.sh` or open Unity and choose **BCSignVR → Build Quest 3 APK**.
+
+To install the APK and mirror the headset view on the Mac, enable Quest Developer Mode and USB debugging, connect the Quest 3 by USB-C, accept the debugging prompt inside the headset, and run `./scripts/run_quest3_on_mac.sh`. The launcher installs and starts BCSignVR, then opens a live Mac window showing the Quest view. It uses `scrcpy` when available (`brew install scrcpy`); otherwise it falls back to ADB plus `ffplay`.
+
+The USB connection is used for the Quest APK and mirror. The existing Mac build remains available for desktop play and Meta XR Simulator testing. A physical Quest 3 is still required for final optical-hand-tracking and performance validation.
 
 ## Run on Windows 11
 

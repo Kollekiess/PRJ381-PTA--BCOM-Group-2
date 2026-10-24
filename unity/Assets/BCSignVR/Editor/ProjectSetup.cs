@@ -73,6 +73,26 @@ namespace BCSignVR.Editor
             Debug.Log($"BCSignVR Windows 11 build complete: {report.summary.totalSize} bytes");
         }
 
+        [MenuItem("BCSignVR/Build Quest 3 APK")]
+        public static void BuildQuest()
+        {
+            ConfigureOpenXR(BuildTargetGroup.Android);
+            PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android, "za.ac.belgiumcampus.bcsignvr");
+            AssetDatabase.SaveAssets();
+            System.IO.Directory.CreateDirectory("Builds/Quest");
+            var options = new BuildPlayerOptions
+            {
+                scenes = new[] { "Assets/Scenes/Classroom.unity" },
+                locationPathName = "Builds/Quest/BCSignVR-Quest3.apk",
+                target = BuildTarget.Android,
+                options = BuildOptions.Development
+            };
+            var report = BuildPipeline.BuildPlayer(options);
+            if (report.summary.result != UnityEditor.Build.Reporting.BuildResult.Succeeded)
+                throw new System.Exception($"Quest 3 APK build failed: {report.summary.result}");
+            Debug.Log($"BCSignVR Quest 3 APK complete: {report.summary.totalSize} bytes");
+        }
+
         static void ConfigureOpenXR(BuildTargetGroup group)
         {
             const string settingsPath = "Assets/XR/XRGeneralSettingsPerBuildTarget.asset";
