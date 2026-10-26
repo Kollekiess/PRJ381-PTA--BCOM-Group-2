@@ -79,6 +79,68 @@ namespace BCSignVR.Tests
         }
 
         [Test]
+        public void UpdatedQuestTemplateLibraryRecognizesEveryAlphabetSign()
+        {
+            var templateAsset = Resources.Load<TextAsset>("sasl_templates_quest");
+            Assert.IsNotNull(templateAsset, "Chantel's reviewed Quest template library must load.");
+            var library = JsonUtility.FromJson<TemplateLibrary>(templateAsset.text);
+            var cameraObject = new GameObject("Quest complete alphabet viewpoint");
+            try
+            {
+                var camera = cameraObject.AddComponent<Camera>();
+                var recognizer = new SaslAlphabetPoseRecognizer();
+                Assert.IsTrue(recognizer.IsReady, "The dense Quest model must load beside the reviewed templates.");
+                foreach (var template in library.templates)
+                {
+                    recognizer.Reset();
+                    var hand = new HandPoseFrame { tracked = true, source = "updated Quest template" };
+                    SetTemplatePose(hand, template.features, Vector2.zero);
+                    var matched = false;
+                    var observedLabel = "UNKNOWN";
+                    var observedConfidence = 0f;
+                    for (var frame = 0; frame < 7; frame++)
+                    {
+                        matched = recognizer.TryRecognize(hand, camera, out observedLabel, out observedConfidence) &&
+                            observedLabel == "TEAM_SASL_" + template.label && observedConfidence >= .60f;
+                    }
+                    Assert.IsTrue(matched, $"The reviewed {template.label} handshape must be recognized on Quest (saw {observedLabel}, {observedConfidence:P0}).");
+                }
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(cameraObject);
+            }
+        }
+
+        [TestCase("J")]
+        [TestCase("Z")]
+        public void MovementLettersRecognizeTheirFullTeachingStroke(string expectedLabel)
+        {
+            var templateAsset = Resources.Load<TextAsset>("sasl_templates_quest");
+            var library = JsonUtility.FromJson<TemplateLibrary>(templateAsset.text);
+            var template = library.templates.Single(item => item.label == expectedLabel);
+            var cameraObject = new GameObject("Quest movement-letter viewpoint");
+            try
+            {
+                var camera = cameraObject.AddComponent<Camera>();
+                var recognizer = new SaslAlphabetPoseRecognizer();
+                var hand = new HandPoseFrame { tracked = true, source = "Quest movement test" };
+                var matched = false;
+                foreach (var point in TeachingStroke(expectedLabel))
+                {
+                    SetTemplatePose(hand, template.features, point);
+                    matched = recognizer.TryRecognize(hand, camera, out var label, out var confidence) &&
+                        label == "TEAM_SASL_" + expectedLabel && confidence >= .80f;
+                }
+                Assert.IsTrue(matched, $"Quest must recognize the complete moving {expectedLabel} stroke.");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(cameraObject);
+            }
+        }
+
+        [Test]
         public void OpenPracticePoseDoesNotFalseConfirmLetterB()
         {
             var cameraObject = new GameObject("Quest open-hand validation viewpoint");
@@ -134,6 +196,50 @@ namespace BCSignVR.Tests
                     Assert.IsFalse(float.IsNaN(feature) || float.IsInfinity(feature),
                         $"{letter} contains an invalid landmark.");
             }
+        }
+
+        static void SetTemplatePose(HandPoseFrame hand, float[] features, Vector2 wristImageOffset)
+        {
+            var worldOffset = new Vector3(-wristImageOffset.x, -wristImageOffset.y, 0f);
+            for (var landmark = 0; landmark < QuestJointForMediaPipe.Length; landmark++)
+            {
+                var offset = landmark * 3;
+                hand.joints[QuestJointForMediaPipe[landmark]] = new Vector3(
+                    -features[offset], -features[offset + 1], -features[offset + 2]) + worldOffset;
+            }
+        }
+
+        static Vector2[] TeachingStroke(string label)
+        {
+            var output = new Vector2[28];
+            for (var index = 0; index < output.Length; index++)
+            {
+                var phase = index / (output.Length - 1f);
+                if (label == "Z")
+                {
+                    if (phase < .34f)
+                        output[index] = Vector2.Lerp(new Vector2(-.25f, .24f), new Vector2(.25f, .24f), Ease(phase / .34f));
+                    else if (phase < .67f)
+                        output[index] = Vector2.Lerp(new Vector2(.25f, .24f), new Vector2(-.25f, -.28f), Ease((phase - .34f) / .33f));
+                    else
+                        output[index] = Vector2.Lerp(new Vector2(-.25f, -.28f), new Vector2(.25f, -.28f), Ease((phase - .67f) / .33f));
+                }
+                else if (phase < .62f)
+                    output[index] = Vector2.Lerp(new Vector2(.15f, .24f), new Vector2(.15f, -.28f), Ease(phase / .62f));
+                else
+                {
+                    var curl = Ease((phase - .62f) / .38f);
+                    output[index] = new Vector2(Mathf.Lerp(.15f, -.23f, curl),
+                        -.28f + Mathf.Sin(curl * Mathf.PI) * .14f);
+                }
+            }
+            return output;
+        }
+
+        static float Ease(float value)
+        {
+            value = Mathf.Clamp01(value);
+            return value * value * (3f - 2f * value);
         }
 
         [Test]

@@ -85,6 +85,7 @@ namespace BCSignVR
         float alphabetAdvanceDeadline;
         TextMesh alphabetAdvanceCountdown;
         bool alphabetStepSaved;
+        float alphabetSuccessConfidence;
         string token, saveStatus = "Progress saved";
         bool apiConnected;
         int profileRevision;
@@ -255,6 +256,7 @@ namespace BCSignVR
             targetPicture = null;
             successCountdown = null; successPrompt = null;
             alphabetAdvanceCountdown = null; alphabetSuccessPrompt = null; alphabetStepSaved = false;
+            alphabetSuccessConfidence = 0f;
             progressFill = null; nextButton = null;
             matchHeld = 0;
         }
@@ -574,6 +576,10 @@ namespace BCSignVR
                 alphabetStatus.text = $"Model matches {letter}  /  confidence {alphabetRecognitionConfidence:P0}. Compare the example, then save practice.";
             else if (current.tracked && recognized.StartsWith("TEAM_SASL_"))
                 alphabetStatus.text = $"Model sees {recognized.Replace("TEAM_SASL_", "")}. Adjust your hand to match {letter}, then try again.";
+            else if (current.tracked && (letter == "J" || letter == "Z"))
+                alphabetStatus.text = letter == "J"
+                    ? "Keep your little finger up and trace a clear J in the air."
+                    : "Keep your index finger out and trace a clear Z in the air.";
             else alphabetStatus.text = current.tracked
                 ? inputMode == InputMode.Demo ? "Demo hand ready. Compare it with Bob's example." : "Hand tracked. Hold the sign steady while the model checks it."
                 : inputMode == InputMode.Camera ? webcam.IsReceiving ? "Camera ready. Show your RIGHT hand to the webcam." :
@@ -658,13 +664,17 @@ namespace BCSignVR
 
         void AdvanceAfterAlphabetSuccess()
         {
+            // Do not record an automatically detected success until the
+            // learner chooses Next. Retry therefore genuinely retries instead
+            // of leaving a completed lesson behind in local history.
+            SaveAlphabetStep(alphabetSuccessConfidence > 0f ? alphabetSuccessConfidence : alphabetRecognitionConfidence);
             if (alphabetIndex == 25) ShowHome(); else ShowAlphabet(alphabetIndex + 1);
         }
 
         void ShowAlphabetSuccessPrompt()
         {
             if (alphabetSuccessPrompt != null || content == null) return;
-            SaveAlphabetStep(alphabetRecognitionConfidence);
+            alphabetSuccessConfidence = alphabetRecognitionConfidence;
             alphabetAdvanceDeadline = Time.unscaledTime + AlphabetAdvanceSeconds;
             content.gameObject.SetActive(false);
             alphabetSuccessModalRoot = new GameObject("Alphabet success modal layer").transform;
@@ -678,8 +688,10 @@ namespace BCSignVR
             ClassroomUi.Label($"{letter} confirmed  /  confidence {alphabetRecognitionConfidence:P0}",
                 alphabetSuccessPrompt, 0, .34f, .13f, ClassroomUi.Ink, TextAnchor.MiddleCenter, 4.2f);
             var nextButton = ClassroomUi.Button(alphabetIndex == 25 ? "Finish  (5)" : "Next sign  (5)",
-                alphabetSuccessPrompt, 0, -.55f, 2.15f, AdvanceAfterAlphabetSuccess, true, .38f);
+                alphabetSuccessPrompt, -1.10f, -.55f, 1.95f, AdvanceAfterAlphabetSuccess, true, .38f);
             alphabetAdvanceCountdown = nextButton.GetComponentInChildren<TextMesh>();
+            ClassroomUi.Button("Retry", alphabetSuccessPrompt, 1.10f, -.55f, 1.65f,
+                RetryAfterAlphabetSuccess, false, .38f);
             tutor?.Say(alphabetIndex == 25 ? "Excellent. You completed the alphabet." : "Excellent. The next sign is opening now.", true);
         }
 
@@ -691,12 +703,25 @@ namespace BCSignVR
                 AdvanceAfterAlphabetSuccess();
                 return;
             }
+            if (Input.GetKeyDown(KeyCode.R))
+            {
+                RetryAfterAlphabetSuccess();
+                return;
+            }
             var remaining = Mathf.Max(0, Mathf.CeilToInt(alphabetAdvanceDeadline - Time.unscaledTime));
             if (alphabetAdvanceCountdown != null)
                 alphabetAdvanceCountdown.text = remaining > 0
                     ? alphabetIndex == 25 ? $"Finish  ({remaining})" : $"Next sign  ({remaining})"
                     : "Opening…";
             if (remaining <= 0) AdvanceAfterAlphabetSuccess();
+        }
+
+        void RetryAfterAlphabetSuccess()
+        {
+            if (alphabetSuccessPrompt == null) return;
+            var letter = ((char)('A' + alphabetIndex)).ToString();
+            ShowAlphabet(alphabetIndex);
+            tutor?.Say($"Let's try the {letter} sign once more.", true);
         }
 
         static string AlphabetTip(string expected, string observed)

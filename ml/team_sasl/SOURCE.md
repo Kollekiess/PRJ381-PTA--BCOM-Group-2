@@ -19,6 +19,13 @@ source feature normalization and contiguous per-letter holdout: 439 test rows
 reproduce the reported 77.45% accuracy exactly. This verifies the conversion;
 it does not improve the source dataset's generalisation.
 
+The repository's `Updated-Hand-signs` upload was also cross-checked before this
+integration. Its A–Z template library and labels match the checked-in source,
+while its additional word model is a separate sequence model that this
+alphabet lesson does not consume. Quest now loads the reviewed A–Z templates
+as a normalized fallback alongside the dense model, preserving the app's Bob
+artwork and lesson styling.
+
 Before importing it, I audited the repository data: the CSV has 2,146 rows and
 all 26 A–Z labels, but the accompanying session record contains only one
 session and the rows do not identify signers or a qualified SASL reviewer. The
