@@ -10,7 +10,7 @@ namespace BCSignVR
     public sealed class BCSignVRApp : MonoBehaviour
     {
         public enum InputMode { Camera, VR, Demo }
-        enum Page { Profiles, AddProfile, Home, Practice, Results, Progress, Help, Sasl, Input, SaslPractice, Alphabet, Basics, Fingerspell }
+        enum Page { Profiles, AddProfile, Home, Practice, Results, Progress, Help, Sasl, ChantelWords, ChantelWordPractice, Input, SaslPractice, Alphabet, Basics, Fingerspell }
         const int ProfilesPerPage = 5;
         public const float ConfidentAlphabetAdvance = .80f;
         const float AlphabetAdvanceSeconds = 5f;
@@ -49,10 +49,15 @@ namespace BCSignVR
         LearnerProfileStore profileStore;
         LearnerProfile activeProfile;
         SaslReferenceLibrary references;
+        SaslWordPlaybackLibrary chantelWords;
         readonly HandPoseFrame researchReference = new();
+        readonly HandPoseFrame chantelLeftReference = new();
+        readonly HandPoseFrame chantelRightReference = new();
         int researchIndex;
         float researchStarted;
         bool slowReplay;
+        int chantelWordIndex;
+        float chantelWordStarted;
         Transform board;
         Transform content;
         Transform presentationRoot;
@@ -71,6 +76,7 @@ namespace BCSignVR
         Transform progressFill;
         BoardButton nextButton;
         HandSkeletonView targetView, liveView;
+        HandSkeletonView chantelLeftView, chantelRightView;
         GameObject learnerHandPicture;
         GameObject practiceExamplePicture, practiceLearnerPicture;
         GameObject targetPicture;
@@ -136,6 +142,7 @@ namespace BCSignVR
             floatingHands = new FloatingHandsView();
             profileStore = new LearnerProfileStore();
             references = new SaslReferenceLibrary();
+            chantelWords = new SaslWordPlaybackLibrary();
             webcam = new WebcamHandPoseProvider();
             for (var i = 0; i < Labels.Length; i++)
                 evaluator.AddTemplate(Labels[i], SimulatedHandPoseProvider.Template((SimulatedHandPoseProvider.DemoPose)i));
@@ -162,11 +169,12 @@ namespace BCSignVR
             ClassroomUi.Panel("Header divider", board, new Vector3(0, 1.40f, -.025f), new Vector2(6.30f, .012f), ClassroomUi.Line, .006f);
             navigationRoot = new GameObject("Learner navigation").transform;
             navigationRoot.SetParent(board, false);
-            ClassroomUi.Button("Classroom", navigationRoot, -2.48f, 1.10f, 1.20f, ShowHome);
-            ClassroomUi.Button("Explore", navigationRoot, -1.22f, 1.10f, 1.20f, ShowSasl);
-            ClassroomUi.Button("Progress", navigationRoot, .02f, 1.10f, 1.20f, ShowProgress);
-            ClassroomUi.Button("Switch user", navigationRoot, 1.30f, 1.10f, 1.30f, ShowProfiles);
-            ClassroomUi.Button("?  Help", navigationRoot, 2.65f, 1.10f, .90f, ShowHelp);
+            ClassroomUi.Button("Classroom", navigationRoot, -2.53f, 1.10f, 1.08f, ShowHome);
+            ClassroomUi.Button("Explore", navigationRoot, -1.37f, 1.10f, 1.00f, ShowSasl);
+            ClassroomUi.Button("Words", navigationRoot, -.23f, 1.10f, 1.00f, ShowChantelWords);
+            ClassroomUi.Button("Progress", navigationRoot, .90f, 1.10f, 1.05f, ShowProgress);
+            ClassroomUi.Button("Switch user", navigationRoot, 2.03f, 1.10f, 1.10f, ShowProfiles);
+            ClassroomUi.Button("?", navigationRoot, 3.08f, 1.10f, .46f, ShowHelp);
             controlsFooter = new GameObject("Comfort and controls").transform;
             controlsFooter.position = new Vector3(.65f, .04f, 4.5f);
             ClassroomUi.Label("Click to choose  /  Tab + Enter  /  VR: aim + trigger, pinch, or dwell", controlsFooter,
@@ -242,7 +250,8 @@ namespace BCSignVR
             // tracked hand, a controller, or an explicit button in the view.
             ClassroomUi.GazeSelectionEnabled = next == Page.Profiles || next == Page.AddProfile ||
                 next == Page.Home || next == Page.Results || next == Page.Progress ||
-                next == Page.Help || next == Page.Sasl || next == Page.Input;
+                next == Page.Help || next == Page.Sasl || next == Page.ChantelWords ||
+                next == Page.ChantelWordPractice || next == Page.Input;
             if (content != null) { content.gameObject.SetActive(false); Destroy(content.gameObject); }
             if (successModalRoot != null) { Destroy(successModalRoot.gameObject); successModalRoot = null; }
             if (alphabetSuccessModalRoot != null) { Destroy(alphabetSuccessModalRoot.gameObject); alphabetSuccessModalRoot = null; }
@@ -250,7 +259,8 @@ namespace BCSignVR
             webcamPreview = null;
             content = new GameObject(next.ToString()).transform; content.SetParent(board, false);
             content.localPosition = new Vector3(0, 0, -.10f);
-            targetView = null; liveView = null; feedbackText = detailsText = matchText = trackingText = demoPoseText = null;
+            targetView = null; liveView = null; chantelLeftView = chantelRightView = null;
+            feedbackText = detailsText = matchText = trackingText = demoPoseText = null;
             learnerHandPicture = null;
             practiceExamplePicture = practiceLearnerPicture = null;
             targetPicture = null;
@@ -1058,6 +1068,7 @@ namespace BCSignVR
             }
             if (page == Page.Basics) { UpdateBasics(); return; }
             if (page == Page.Fingerspell) { UpdateFingerspell(); return; }
+            if (page == Page.ChantelWordPractice) { UpdateChantelWordPractice(); return; }
             if (page == Page.SaslPractice) { UpdateResearchPractice(); return; }
             if (page == Page.Practice && lessonCompleted) { UpdateSuccessPrompt(); return; }
             if (page != Page.Practice) return;
@@ -1337,6 +1348,91 @@ namespace BCSignVR
             StartCoroutine(UpdateResearchPrediction());
         }
 
+        void ShowChantelWords()
+        {
+            BeginPage(Page.ChantelWords);
+            ClassroomUi.Label("Chantel's greetings & word signs.", content, -3.06f, .57f, .27f, ClassroomUi.Ink);
+            ClassroomUi.Label("Watch the recorded sequences from the Updated-Hand-signs upload, rendered in Bob's hand style.",
+                content, -3.06f, .22f, .14f, ClassroomUi.Muted, maxWidth: 6.25f);
+            ClassroomUi.Panel("Chantel word note", content, new Vector3(0, -.10f, 0), new Vector2(6.16f, .32f),
+                new Color(.94f, .97f, .99f), .09f, true);
+            ClassroomUi.Label("Visual reference  /  choose a phrase to replay the captured hand movement  /  Quest word recognition is next",
+                content, 0, -.10f, .11f, ClassroomUi.DeepBlue, TextAnchor.MiddleCenter, 5.95f);
+
+            for (var i = 0; i < ChantelWordCatalog.Count; i++)
+            {
+                var entry = ChantelWordCatalog.Get(i);
+                var row = i < 3 ? 0 : 1;
+                var column = i < 3 ? i - 1 : i - 3;
+                var x = row == 0 ? column * 2.09f : (column == 0 ? -1.05f : 1.05f);
+                var tile = ClassroomUi.Panel("Chantel word " + entry.label, content,
+                    new Vector3(x, row == 0 ? -.78f : -1.76f, 0),
+                    new Vector2(row == 0 ? 1.91f : 2.03f, .84f),
+                    row == 0 ? Color.white : new Color(.95f, .98f, 1f), .14f, true).transform;
+                ClassroomUi.Label(entry.displayName, tile, 0, .25f, .17f, ClassroomUi.DeepBlue,
+                    TextAnchor.MiddleCenter, row == 0 ? 1.72f : 1.86f);
+                ClassroomUi.Label(entry.clipCount + " recorded clips", tile, 0, .02f, .10f,
+                    ClassroomUi.Muted, TextAnchor.MiddleCenter);
+                var selected = entry.label;
+                ClassroomUi.Button("Watch sign  >", tile, 0, -.25f, 1.55f,
+                    () => ShowChantelWord(selected), height: .25f);
+            }
+        }
+
+        void ShowChantelWord(string label)
+        {
+            var index = ChantelWordCatalog.IndexOf(label);
+            if (index < 0 || chantelWords == null || chantelWords.Count == 0)
+            {
+                ShowChantelWords();
+                return;
+            }
+
+            chantelWordIndex = index;
+            chantelWordStarted = Time.time;
+            var entry = ChantelWordCatalog.Get(index);
+            BeginPage(Page.ChantelWordPractice);
+            tutor?.Say("Watch the recorded word sequence, then replay it as many times as you like.", true);
+            ClassroomUi.Label("CHANTEL'S WORD SEQUENCE", content, -3.06f, .61f, .12f, ClassroomUi.Blue);
+            ClassroomUi.Label(entry.displayName, content, -3.06f, .26f, .30f, ClassroomUi.Ink);
+            ClassroomUi.Label(entry.clipCount + " recorded clips  /  visual reference replay", content,
+                -3.06f, -.05f, .135f, ClassroomUi.Muted);
+
+            var playbackCard = ClassroomUi.Panel("Chantel captured word sequence", content, new Vector3(0, -.84f, 0),
+                new Vector2(6.16f, 1.66f), new Color(.94f, .98f, 1f), .16f, true).transform;
+            ClassroomUi.Label("CHANTEL CAPTURE  /  BOB-STYLE LANDMARK REPLAY", playbackCard, -3.05f, .58f, .10f,
+                ClassroomUi.DeepBlue, maxWidth: 5.9f);
+            chantelLeftView = new HandSkeletonView("Chantel recorded left hand", content, new Color(.97f, .73f, .57f), true);
+            chantelRightView = new HandSkeletonView("Chantel recorded right hand", content, new Color(.97f, .73f, .57f), true);
+            ClassroomUi.Label("Replaying one of the uploaded 30-frame clips.", content, 0, -1.76f, .12f,
+                ClassroomUi.Ink, TextAnchor.MiddleCenter, 5.9f);
+            ClassroomUi.Label("The five-word classifier is trained separately and is not yet live Quest recognition.",
+                content, 0, -1.98f, .10f, ClassroomUi.Muted, TextAnchor.MiddleCenter, 6.1f);
+            ClassroomUi.Button("<  Words", content, -2.35f, -2.22f, 1.45f, ShowChantelWords, height: .31f);
+            ClassroomUi.Button("Replay", content, -.65f, -2.22f, 1.25f,
+                () => chantelWordStarted = Time.time, height: .31f);
+            ClassroomUi.Button("Classroom", content, 1.05f, -2.22f, 1.55f, ShowHome, height: .31f);
+        }
+
+        void UpdateChantelWordPractice()
+        {
+            if (chantelWords == null || content == null) return;
+            chantelWords.GetPoses(chantelWordIndex, (Time.time - chantelWordStarted) / 4f,
+                chantelLeftReference, chantelRightReference);
+            var leftPosition = -1.22f;
+            var rightPosition = 1.22f;
+            if (chantelLeftReference.tracked && !chantelRightReference.tracked)
+                leftPosition = 0f;
+            else if (!chantelLeftReference.tracked && chantelRightReference.tracked)
+                rightPosition = 0f;
+            chantelLeftView?.SetPose(chantelLeftReference,
+                content.TransformPoint(new Vector3(leftPosition, -1.08f, -.20f)),
+                Quaternion.Euler(0, 180, 0), .82f);
+            chantelRightView?.SetPose(chantelRightReference,
+                content.TransformPoint(new Vector3(rightPosition, -1.08f, -.20f)),
+                Quaternion.Euler(0, 180, 0), .82f);
+        }
+
         void ShowResearchPractice(int index)
         {
             if (references.Count <= index) return;
@@ -1585,6 +1681,9 @@ namespace BCSignVR
             else if (scenario == "help") ShowHelp();
             else if (scenario == "progress") ShowProgress();
             else if (scenario == "sasl") ShowSasl();
+            else if (scenario == "chantel-words") ShowChantelWords();
+            else if (scenario.StartsWith("chantel-word-", StringComparison.OrdinalIgnoreCase))
+                ShowChantelWord(scenario.Substring("chantel-word-".Length).Replace('-', '_').ToUpperInvariant());
             else if (scenario == "reference") ShowResearchPractice(0);
             else if (scenario == "sasl-capetown") { inputMode = InputMode.VR; ShowResearchPractice(0); }
             else if (scenario == "sasl-bloemfontein") { inputMode = InputMode.VR; ShowResearchPractice(1); }
