@@ -1342,10 +1342,10 @@ namespace BCSignVR
         void ShowChantelWords()
         {
             BeginPage(Page.ChantelWords);
-            ClassroomUi.Label("Chantel's greetings & word signs.", content, -3.06f, .57f, .27f, ClassroomUi.Ink);
-            ClassroomUi.Label("Watch the recorded sequences from the Updated-Hand-signs upload, rendered in Bob's hand style.",
+            ClassroomUi.Label("Greetings & word signs.", content, -3.06f, .57f, .27f, ClassroomUi.Ink);
+            ClassroomUi.Label("Watch the reviewed recorded sequences, rendered in Bob's hand style.",
                 content, -3.06f, .22f, .14f, ClassroomUi.Muted, maxWidth: 6.25f);
-            ClassroomUi.Panel("Chantel word note", content, new Vector3(0, -.10f, 0), new Vector2(6.16f, .32f),
+            ClassroomUi.Panel("Word sign note", content, new Vector3(0, -.10f, 0), new Vector2(6.16f, .32f),
                 new Color(.94f, .97f, .99f), .09f, true);
             ClassroomUi.Label("Visual reference  /  choose a phrase to replay the captured hand movement  /  Quest word recognition is next",
                 content, 0, -.10f, .11f, ClassroomUi.DeepBlue, TextAnchor.MiddleCenter, 5.95f);
@@ -1384,7 +1384,7 @@ namespace BCSignVR
             var entry = ChantelWordCatalog.Get(index);
             BeginPage(Page.ChantelWordPractice);
             tutor?.Say("Watch the recorded word sequence, then replay it as many times as you like.", true);
-            ClassroomUi.Label("CHANTEL'S WORD SEQUENCE", content, -3.06f, .61f, .12f, ClassroomUi.Blue);
+            ClassroomUi.Label("WORD SEQUENCE", content, -3.06f, .61f, .12f, ClassroomUi.Blue);
             ClassroomUi.Label(entry.displayName, content, -3.06f, .26f, .30f, ClassroomUi.Ink);
             ClassroomUi.Label(entry.clipCount + " recorded clips  /  visual reference replay", content,
                 -3.06f, -.05f, .135f, ClassroomUi.Muted);
