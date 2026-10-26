@@ -302,8 +302,8 @@ namespace BCSignVR
                 content, -.90f, -1.83f, 2.45f, () => ShowAlphabet(Mathf.Min(history.AlphabetPractisedCount, 25)), true);
             var handCard = ClassroomUi.Panel("Hand welcome", content, new Vector3(2.13f, -.17f, 0),
                 new Vector2(1.95f, 1.87f), new Color(.91f, .96f, .99f), .20f, true).transform;
-            ClassroomUi.Label("Next: greetings", handCard, 0, .65f, .145f, ClassroomUi.DeepBlue, TextAnchor.MiddleCenter, 1.75f);
-            ClassroomUi.Picture("Welcome cartoon hand", "CartoonHandOpen", handCard,
+            ClassroomUi.Label("Bob's greeting sign", handCard, 0, .65f, .145f, ClassroomUi.DeepBlue, TextAnchor.MiddleCenter, 1.75f);
+            MovementDemoView.Create("Bob welcome greeting sign", "CartoonHandGreeting", "greeting", handCard,
                 new Vector3(0, -.02f, -.12f), new Vector2(1.10f, 1.10f));
             ClassroomUi.Button("Preview greeting", handCard, 0, -.64f, 1.58f, ShowGreeting, height: .31f);
             ClassroomUi.Label("Choose your input", content, 1.23f, -1.43f, .13f, ClassroomUi.Muted);
@@ -487,7 +487,7 @@ namespace BCSignVR
             lessonStarted = Time.time;
             BeginPage(Page.Alphabet);
             var letter = ((char)('A' + alphabetIndex)).ToString();
-            tutor?.Say($"This is letter {letter}. Copy the handshape, then show me.", true);
+            tutor?.Say($"This is letter {letter}. Copy the sign, then show me.", true);
             ClassroomUi.Label($"Letter {letter}", content, -3.06f, .61f, .29f, ClassroomUi.Ink);
             ClassroomUi.Label($"{alphabetIndex + 1} / 26", content, 3.06f, .61f, .18f, ClassroomUi.Blue, TextAnchor.MiddleRight);
             ClassroomUi.Label("Study the fingers, thumb and palm direction. Keep your whole hand in view.",
@@ -716,7 +716,7 @@ namespace BCSignVR
             CreateLearnerHandPicture(learner, new Vector3(0, -.05f, -.12f), new Vector2(1.24f, 1.24f), "CartoonHand" + letter);
             if (inputMode == InputMode.VR)
                 liveView = new HandSkeletonView("Phrase learner hand", content, new Color(.97f, .73f, .57f), true);
-            alphabetStatus = ClassroomUi.Label($"Show the handshape for {letter}.", content, -3.05f, -1.64f, .15f,
+            alphabetStatus = ClassroomUi.Label($"Show the sign for {letter}.", content, -3.05f, -1.64f, .15f,
                 ClassroomUi.Ink, maxWidth: 6.1f);
             ClassroomUi.Button("<  Greeting", content, -2.45f, -2.08f, 1.45f, ShowGreeting, height: .35f);
             ClassroomUi.Button("Check letter", content, .55f, -2.08f, 1.55f, CheckFingerspellLetter, true, .35f);
@@ -740,7 +740,7 @@ namespace BCSignVR
             {
                 fingerspellHeld += Time.deltaTime;
                 alphabetStatus.text = $"Model matches {fingerspellLetters[fingerspellIndex]}  /  {alphabetRecognitionConfidence:P0}. Hold it steady, then check.";
-                tutor?.Say("That handshape is looking good. Hold it steady.");
+                tutor?.Say("That sign is looking good. Hold it steady.");
             }
             else
             {
@@ -989,7 +989,7 @@ namespace BCSignVR
                     tutor?.Say(correct ? "Looking good! Hold it steady for a moment." : PoseHint(lessonIndex));
                     feedbackText.text = correct ? inputMode == InputMode.Demo ? "Ready! Choose Check hand." : "That's it! Hold your hand steady." : PoseHint(lessonIndex);
                     matchText.text = inputMode == InputMode.Camera
-                        ? $"{match:P0} shape match  /  hold steady"
+                        ? $"{match:P0} sign match  /  hold steady"
                         : inputMode == InputMode.VR
                         ? $"{match:P0} Quest joint match  /  hold steady"
                         : $"{match:P0} match";
@@ -1233,7 +1233,7 @@ namespace BCSignVR
             BeginPage(Page.SaslPractice);
             tutor?.Say("Watch the movement, then try it. Replay any time.", true);
             ClassroomUi.Label(references.Title(index), content, -3.06f, .61f, .29f, ClassroomUi.Ink);
-            ClassroomUi.Label("SASL research reference  /  watch the hand shape and movement", content, -3.06f, .25f, .145f, ClassroomUi.Muted);
+            ClassroomUi.Label("SASL research reference  /  watch the sign and movement", content, -3.06f, .25f, .145f, ClassroomUi.Muted);
             var example = ClassroomUi.Panel("Research example", content, new Vector3(-1.67f, -.65f, 0), new Vector2(2.83f, 1.46f),
                 new Color(.94f, .98f, 1f), .16f, true).transform;
             var learner = ClassroomUi.Panel("Research learner", content, new Vector3(1.67f, -.65f, 0), new Vector2(2.83f, 1.46f),
@@ -1295,7 +1295,7 @@ namespace BCSignVR
             feedbackText.text = !current.tracked ? inputMode == InputMode.Camera ?
                 "Show your RIGHT hand to the webcam to try the movement." : "Raise your RIGHT hand to try the movement." :
                 inputMode == InputMode.Camera && webcam.RecognizedLabel == references.Label(researchIndex) ? $"Similar movement detected  /  similarity {webcam.RecognitionConfidence:P0}" :
-                "Watch the shape and direction, then try the movement again.";
+                "Watch the sign and direction, then try the movement again.";
         }
 
         void TryGetInputHand(HandPoseFrame destination)
@@ -1468,6 +1468,7 @@ namespace BCSignVR
             var scenario = Environment.GetEnvironmentVariable("BCSIGNVR_PREVIEW_PAGE") ?? "";
             if (scenario == "profiles") ShowProfiles();
             else if (scenario == "add-profile") ShowAddProfile();
+            else if (scenario == "home") ShowHome();
             else if (scenario == "practice" || scenario == "missing")
             { inputMode = scenario == "missing" ? InputMode.Camera : InputMode.Demo; StartWarmup(); }
             else if (scenario == "help") ShowHelp();

@@ -482,7 +482,7 @@ namespace BCSignVR
             // the board. Requiring a button hit here hid the cursor precisely
             // when the learner needed it to aim at a button.
             var hasAimPoint = candidate.target != null || candidate.hasVisualPoint &&
-                (IsControllerSource(candidate.sourceId) || candidate.pressed || candidate.sourceId == 0);
+                (IsControllerSource(candidate.sourceId) || candidate.pressed);
             if (!hasAimPoint) return;
             var ray = candidate.ray;
             var end = candidate.targetHit.collider != null ? candidate.targetHit.point :
@@ -748,17 +748,11 @@ namespace BCSignVR
                 candidates.Add(candidate);
             }
 
-            if (candidates.Count == 0)
-            {
-                var gazeCandidate = new PointerCandidate {
-                    ray = new Ray(transform.position, transform.forward),
-                    maxLength = 4.2f,
-                    visualIndex = 0,
-                    sourceId = 0
-                };
-                ResolveCandidate(ref gazeCandidate);
-                candidates.Add(gazeCandidate);
-            }
+            // Do not synthesize a head-gaze pointer when neither a hand nor a
+            // controller is tracked. A gaze fallback made the cursor sit in
+            // the learner's view while they were signing and could start the
+            // five-second dwell without an intentional selection gesture.
+            // Controllers and tracked hands remain the only VR selectors.
         }
 
         int ChooseActiveCandidate()
