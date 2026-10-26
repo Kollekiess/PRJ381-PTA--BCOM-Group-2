@@ -1343,12 +1343,12 @@ namespace BCSignVR
         {
             BeginPage(Page.ChantelWords);
             ClassroomUi.Label("Greetings & word signs.", content, -3.06f, .57f, .27f, ClassroomUi.Ink);
-            ClassroomUi.Label("Watch the reviewed recorded sequences, rendered in Bob's hand style.",
+            ClassroomUi.Label("Watch reviewed sequences in Bob's hand style.",
                 content, -3.06f, .22f, .14f, ClassroomUi.Muted, maxWidth: 6.25f);
-            ClassroomUi.Panel("Word sign note", content, new Vector3(0, -.10f, 0), new Vector2(6.16f, .32f),
+            ClassroomUi.Panel("Word sign note", content, new Vector3(0, -.10f, 0), new Vector2(6.16f, .36f),
                 new Color(.94f, .97f, .99f), .09f, true);
-            ClassroomUi.Label("Visual reference  /  replay each reviewed hand movement  /  live practice is in Classroom",
-                content, 0, -.10f, .11f, ClassroomUi.DeepBlue, TextAnchor.MiddleCenter, 5.95f);
+            ClassroomUi.Label("Replay reviewed movement  /  live practice in Classroom",
+                content, 0, -.10f, .115f, ClassroomUi.DeepBlue, TextAnchor.MiddleCenter, 5.95f);
 
             for (var i = 0; i < ChantelWordCatalog.Count; i++)
             {
@@ -1386,21 +1386,21 @@ namespace BCSignVR
             tutor?.Say("Watch the recorded word sequence, then replay it as many times as you like.", true);
             ClassroomUi.Label("WORD SEQUENCE", content, -3.06f, .61f, .12f, ClassroomUi.Blue);
             ClassroomUi.Label(entry.displayName, content, -3.06f, .26f, .30f, ClassroomUi.Ink);
-            ClassroomUi.Label(entry.clipCount + " recorded clips  /  visual reference replay", content,
-                -3.06f, -.05f, .135f, ClassroomUi.Muted);
+            ClassroomUi.Label(entry.clipCount + " clips  /  visual replay", content,
+                -3.06f, -.03f, .125f, ClassroomUi.Muted);
 
-            ClassroomUi.Panel("Chantel captured word sequence", content, new Vector3(0, -.84f, 0),
-                new Vector2(6.16f, 1.66f), new Color(.94f, .98f, 1f), .16f, true);
+            ClassroomUi.Panel("Chantel captured word sequence", content, new Vector3(0, -.92f, 0),
+                new Vector2(6.16f, 1.48f), new Color(.94f, .98f, 1f), .16f, true);
             chantelLeftView = new HandSkeletonView("Chantel recorded left hand", content, new Color(.97f, .73f, .57f), true);
             chantelRightView = new HandSkeletonView("Chantel recorded right hand", content, new Color(.97f, .73f, .57f), true);
-            ClassroomUi.Label("Replaying one of the uploaded 30-frame clips.", content, 0, -1.76f, .12f,
+            ClassroomUi.Label("One uploaded 30-frame clip.", content, 0, -1.76f, .12f,
                 ClassroomUi.Ink, TextAnchor.MiddleCenter, 5.9f);
-            ClassroomUi.Label("Watch the captured movement, then replay or return to the word list.",
+            ClassroomUi.Label("Watch the movement, then replay or return to Words.",
                 content, 0, -1.98f, .10f, ClassroomUi.Muted, TextAnchor.MiddleCenter, 6.1f);
-            ClassroomUi.Button("<  Words", content, -2.35f, -2.22f, 1.45f, ShowChantelWords, height: .31f);
-            ClassroomUi.Button("Replay", content, -.65f, -2.22f, 1.25f,
+            ClassroomUi.Button("<  Words", content, -1.65f, -2.22f, 1.45f, ShowChantelWords, height: .31f);
+            ClassroomUi.Button("Replay", content, 0f, -2.22f, 1.25f,
                 () => chantelWordStarted = Time.time, height: .31f);
-            ClassroomUi.Button("Classroom", content, 1.05f, -2.22f, 1.55f, ShowHome, height: .31f);
+            ClassroomUi.Button("Classroom", content, 1.65f, -2.22f, 1.55f, ShowHome, height: .31f);
         }
 
         void UpdateChantelWordPractice()
