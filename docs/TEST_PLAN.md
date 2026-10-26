@@ -28,7 +28,7 @@
 - At least one SASL expert reviews every teaching demonstration.
 - Model evaluation holds out entire signers and documents per-class results.
 
-## Latest verification — 25 October 2026
+## Latest verification — 26 October 2026
 
 - Passed: 56 Unity EditMode tests, including scaled-board hand geometry, source-independent cartoon anatomy, the Bob greeting copy, five-second one-shot dwell, controller-trigger/dwell interaction, and delayed network responses during profile switching.
 - Passed: 8 backend, 29 webcam bridge, 5 ML, and 11 Quest helper tests. The helper tests cover reboot identity changes, reconnects, inactive apps, and cleanup.
@@ -39,5 +39,6 @@
 - Restarted the Quest and confirmed that the helper reconnects automatically. After the normal user unlock, opened signzzZ, observed the automatic override reapply without another manual power command, and captured the rendered profile screen with the display awake. The helper does not bypass the post-restart lock.
 - Follow-up anatomy correction: all input sources now use proximal knuckles, not palm metacarpals, for the visible finger bases. The startup greeting now animates Bob’s one-hand greeting sign, and learner-facing prompts use “sign” consistently. All 56 Unity tests passed, the updated Mac tracked-hand preview rendered successfully, and the fist/point cases passed in the expanded sweep. Regional reference hands receive a small fit adjustment so narrow Cape Town/Bloemfontein/Pretoria signs remain legible.
 - Rebuilt and installed the latest Quest APK after the anatomy correction; the app launched to the learner picker and the headset stayed awake. Rebuilt Windows and verified both `BCSignVR Standalone.exe` and `UnityPlayer.dll` are x86-64.
+- Latest pointer correction: the Quest build shows no idle gaze cursor and never starts dwell selection without a tracked hand or controller. A connected-headset stereo capture confirmed the learner picker renders cleanly with no stray cursor.
 - Still required: human live-hand/controller checks on the latest Quest build, visual comparison of all moving tracked poses with Bob's artwork, and the SASL expert/signer-held-out language validation above. Automated geometry/template checks do not establish signing accuracy.
 
