@@ -35,16 +35,18 @@ namespace BCSignVR
 
             var guideObject = new GameObject("Soft movement guide");
             guideObject.transform.SetParent(transform, false);
-            // Keep the guide behind Bob's opaque hand pixels, so the motion
-            // cue never draws a blue line across his palm or fingers.
-            guideObject.transform.localPosition = new Vector3(0, 0, .025f);
+            // The lesson card's face sits at local z -.010. Put the guide just
+            // in front of Bob's hand (the hand is moved to z -.018 below), so
+            // the full J return stroke remains readable instead of being
+            // hidden by the opaque hand artwork at the curl.
+            guideObject.transform.localPosition = new Vector3(0, 0, -.023f);
             guide = guideObject.AddComponent<LineRenderer>();
             guide.useWorldSpace = false;
-            guide.material = ClassroomFactory.Material(new Color(.14f, .58f, .81f));
-            guide.startColor = ClassroomUi.Blue.linear;
-            guide.endColor = ClassroomUi.Blue.linear;
-            guide.startWidth = .014f;
-            guide.endWidth = .014f;
+            guide.material = ClassroomFactory.Material(new Color(.14f, .58f, .81f, .72f));
+            guide.startColor = new Color(ClassroomUi.Blue.r, ClassroomUi.Blue.g, ClassroomUi.Blue.b, .72f).linear;
+            guide.endColor = new Color(ClassroomUi.Blue.r, ClassroomUi.Blue.g, ClassroomUi.Blue.b, .72f).linear;
+            guide.startWidth = .017f;
+            guide.endWidth = .017f;
             guide.numCapVertices = 4;
             guide.numCornerVertices = 4;
             guide.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
@@ -70,7 +72,9 @@ namespace BCSignVR
             for (var i = 0; i < guide.positionCount; i++)
             {
                 var phase = i / (guide.positionCount - 1f);
-                guide.SetPosition(i, MotionPoint(phase) + Vector3.forward * .005f);
+                // A tiny positive offset keeps the guide flush with the hand
+                // while it remains in front of the lesson card face.
+                guide.SetPosition(i, MotionPoint(phase) + Vector3.forward * .001f);
             }
         }
 
