@@ -16,6 +16,10 @@ namespace BCSignVR
 {
     public static class ClassroomUi
     {
+        // Head-gaze is the safe fallback for menus and profile selection. The
+        // app toggles this per page so a learner can sign freely without the
+        // headset cursor dwelling on a control in the lesson board.
+        public static bool GazeSelectionEnabled { get; set; } = true;
         public static readonly Color Blue = new(.14f, .58f, .81f);
         public static readonly Color DeepBlue = new(.08f, .39f, .60f);
         public static readonly Color Ink = new(.18f, .26f, .33f);
@@ -477,12 +481,13 @@ namespace BCSignVR
             if (index < 0 || index >= pointerVisuals.Length) return;
             var visual = pointerVisuals[index];
             if (visual == null) return;
-            // Keep the cursor quiet during sign practice, but let a controller
-            // (or an intentional hand pinch) show its aim point anywhere on
-            // the board. Requiring a button hit here hid the cursor precisely
-            // when the learner needed it to aim at a button.
+            // Keep the cursor quiet during sign practice, but let a controller,
+            // intentional hand pinch, or enabled menu gaze show its aim point
+            // anywhere on the board. Requiring a button hit here hid the cursor
+            // precisely when the learner needed it to aim at a button.
             var hasAimPoint = candidate.target != null || candidate.hasVisualPoint &&
-                (IsControllerSource(candidate.sourceId) || candidate.pressed);
+                (IsControllerSource(candidate.sourceId) || candidate.pressed ||
+                 candidate.sourceId == 0 && ClassroomUi.GazeSelectionEnabled);
             if (!hasAimPoint) return;
             var ray = candidate.ray;
             var end = candidate.targetHit.collider != null ? candidate.targetHit.point :
@@ -748,11 +753,26 @@ namespace BCSignVR
                 candidates.Add(candidate);
             }
 
-            // Do not synthesize a head-gaze pointer when neither a hand nor a
-            // controller is tracked. A gaze fallback made the cursor sit in
-            // the learner's view while they were signing and could start the
-            // five-second dwell without an intentional selection gesture.
-            // Controllers and tracked hands remain the only VR selectors.
+            // Menus retain a headset-gaze fallback so the learner can choose a
+            // profile and navigate without controllers. This candidate is
+            // deliberately omitted from lesson pages; while signing, the
+            // learner's tracked hand should not cause a menu dwell by looking
+            // around the board.
+            if (ClassroomUi.GazeSelectionEnabled)
+            {
+                var camera = Camera.main;
+                if (camera != null)
+                {
+                    var candidate = new PointerCandidate {
+                        ray = new Ray(camera.transform.position, camera.transform.forward),
+                        maxLength = 20f,
+                        visualIndex = candidates.Count,
+                        sourceId = 0
+                    };
+                    ResolveCandidate(ref candidate);
+                    candidates.Add(candidate);
+                }
+            }
         }
 
         int ChooseActiveCandidate()
@@ -778,6 +798,12 @@ namespace BCSignVR
                 if ((candidates[index].sourceId == 4 || candidates[index].sourceId == 3) &&
                     candidates[index].target != null) return index;
 
+            // Gaze is the menu fallback, after an actually aimed hand but
+            // before an idle controller ray that merely reaches the board.
+            for (var index = 0; index < candidates.Count; index++)
+                if (candidates[index].sourceId == 0 && candidates[index].target != null)
+                    return index;
+
             // Once a controller ray reaches the board, keep it as the active
             // cursor even when it is between buttons. This makes the dot and
             // five-second countdown discoverable instead of requiring blind
@@ -798,6 +824,9 @@ namespace BCSignVR
 
             for (var index = 0; index < candidates.Count; index++)
                 if (candidates[index].sourceId == 4 || candidates[index].sourceId == 3) return index;
+
+            for (var index = 0; index < candidates.Count; index++)
+                if (candidates[index].sourceId == 0 && candidates[index].hasVisualPoint) return index;
 
             // Devices are sorted right-hand first, so a fresh controller
             // session starts with the expected dominant-hand pointer.

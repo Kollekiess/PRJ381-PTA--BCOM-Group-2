@@ -122,5 +122,21 @@ namespace BCSignVR.Tests
             Assert.Zero(dwell.Advance(button, 4, 5f, out var selected));
             Assert.IsNull(selected);
         }
+
+        [Test]
+        public void ConfidentAlphabetMatchArmsAutomaticAdvanceOnlyAtEightyPercent()
+        {
+            Assert.IsFalse(BCSignVRApp.IsConfidentAlphabetMatch("TEAM_SASL_C", "TEAM_SASL_C", .799f));
+            Assert.IsTrue(BCSignVRApp.IsConfidentAlphabetMatch("TEAM_SASL_C", "TEAM_SASL_C", .80f));
+            Assert.IsFalse(BCSignVRApp.IsConfidentAlphabetMatch("TEAM_SASL_C", "TEAM_SASL_D", .99f));
+            Assert.IsFalse(BCSignVRApp.IsConfidentAlphabetMatch("TEAM_SASL_C", "UNKNOWN", 1f));
+        }
+
+        [Test]
+        public void MenuGazeFallbackIsEnabledByDefault()
+        {
+            Assert.IsTrue(ClassroomUi.GazeSelectionEnabled,
+                "The profile picker must remain usable before a controller or hand is available.");
+        }
     }
 }

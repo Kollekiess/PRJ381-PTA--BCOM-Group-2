@@ -12,6 +12,8 @@ namespace BCSignVR
         public enum InputMode { Camera, VR, Demo }
         enum Page { Profiles, AddProfile, Home, Practice, Results, Progress, Help, Sasl, Input, SaslPractice, Alphabet, Basics, Fingerspell }
         const int ProfilesPerPage = 5;
+        public const float ConfidentAlphabetAdvance = .80f;
+        const float AlphabetAdvanceSeconds = 5f;
         // Keep the tracked hand large enough to read at Quest distance while
         // preserving clear space for the board card's heading and border.
         const float BoardHandScale = 1.00f;
@@ -64,6 +66,8 @@ namespace BCSignVR
         TextMesh profileNamePreview, profileFormStatus;
         Transform successPrompt;
         Transform successModalRoot;
+        Transform alphabetSuccessPrompt;
+        Transform alphabetSuccessModalRoot;
         Transform progressFill;
         BoardButton nextButton;
         HandSkeletonView targetView, liveView;
@@ -78,6 +82,9 @@ namespace BCSignVR
         bool lessonCompleted, syncing, savingFailed;
         float successDeadline;
         float successMatch;
+        float alphabetAdvanceDeadline;
+        TextMesh alphabetAdvanceCountdown;
+        bool alphabetStepSaved;
         string token, saveStatus = "Progress saved";
         bool apiConnected;
         int profileRevision;
@@ -229,8 +236,15 @@ namespace BCSignVR
         void BeginPage(Page next)
         {
             page = next;
+            // Headset gaze keeps the profile picker and classroom menus usable
+            // with empty hands. Active signing pages intentionally rely on a
+            // tracked hand, a controller, or an explicit button in the view.
+            ClassroomUi.GazeSelectionEnabled = next == Page.Profiles || next == Page.AddProfile ||
+                next == Page.Home || next == Page.Results || next == Page.Progress ||
+                next == Page.Help || next == Page.Sasl || next == Page.Input;
             if (content != null) { content.gameObject.SetActive(false); Destroy(content.gameObject); }
             if (successModalRoot != null) { Destroy(successModalRoot.gameObject); successModalRoot = null; }
+            if (alphabetSuccessModalRoot != null) { Destroy(alphabetSuccessModalRoot.gameObject); alphabetSuccessModalRoot = null; }
             webcamPreview?.Dispose();
             webcamPreview = null;
             content = new GameObject(next.ToString()).transform; content.SetParent(board, false);
@@ -240,6 +254,7 @@ namespace BCSignVR
             practiceExamplePicture = practiceLearnerPicture = null;
             targetPicture = null;
             successCountdown = null; successPrompt = null;
+            alphabetAdvanceCountdown = null; alphabetSuccessPrompt = null; alphabetStepSaved = false;
             progressFill = null; nextButton = null;
             matchHeld = 0;
         }
@@ -550,6 +565,11 @@ namespace BCSignVR
                 "CAMERA  /  WAITING  /  RIGHT HAND" : "YOUR RIGHT HAND  /  NOT VISIBLE";
             var expected = "TEAM_SASL_" + letter;
             var recognized = alphabetRecognizedLabel;
+            if (IsConfidentAlphabetMatch(expected, recognized, alphabetRecognitionConfidence) && !alphabetStepSaved)
+            {
+                ShowAlphabetSuccessPrompt();
+                return;
+            }
             if (current.tracked && recognized == expected)
                 alphabetStatus.text = $"Model matches {letter}  /  confidence {alphabetRecognitionConfidence:P0}. Compare the example, then save practice.";
             else if (current.tracked && recognized.StartsWith("TEAM_SASL_"))
@@ -558,6 +578,12 @@ namespace BCSignVR
                 ? inputMode == InputMode.Demo ? "Demo hand ready. Compare it with Bob's example." : "Hand tracked. Hold the sign steady while the model checks it."
                 : inputMode == InputMode.Camera ? webcam.IsReceiving ? "Camera ready. Show your RIGHT hand to the webcam." :
                 "Camera waiting. Allow Camera access to continue." : "Raise your RIGHT hand in front of you.";
+        }
+
+        public static bool IsConfidentAlphabetMatch(string expected, string recognized, float confidence)
+        {
+            return !string.IsNullOrEmpty(expected) && expected == recognized &&
+                confidence >= ConfidentAlphabetAdvance;
         }
 
         void UpdateAlphabetRecognition()
@@ -577,6 +603,11 @@ namespace BCSignVR
 
         void RecordAlphabetAndNext()
         {
+            if (alphabetSuccessPrompt != null)
+            {
+                AdvanceAfterAlphabetSuccess();
+                return;
+            }
             if (inputMode != InputMode.Demo && !current.tracked)
             {
                 alphabetStatus.text = "Bob needs to see your full hand before saving this step.";
@@ -601,9 +632,16 @@ namespace BCSignVR
                 tutor?.Say(tip, true);
                 return;
             }
-            var accuracy = inputMode == InputMode.Demo ? 0f : alphabetRecognitionConfidence;
+            SaveAlphabetStep(inputMode == InputMode.Demo ? 0f : alphabetRecognitionConfidence);
+            AdvanceAfterAlphabetSuccess();
+        }
+
+        void SaveAlphabetStep(float accuracy)
+        {
+            if (alphabetStepSaved) return;
             try
             {
+                var letter = ((char)('A' + alphabetIndex)).ToString();
                 history.Add(new LocalSessionRecord { lessonId = "alphabet-" + letter.ToLowerInvariant(), accuracy = accuracy,
                     durationSeconds = Mathf.Max(0, Time.time - lessonStarted), mistakes = alphabetMistakes, completed = true,
                     // Reference practice is intentionally local-only; a confident
@@ -613,9 +651,52 @@ namespace BCSignVR
                         inputMode == InputMode.Camera ? "webcam-sasl-research" : "demo" });
                 saveStatus = "Alphabet practice saved";
                 if (apiConnected) StartCoroutine(SyncPending());
+                alphabetStepSaved = true;
             }
             catch (Exception error) { Debug.LogWarning(error.Message); }
+        }
+
+        void AdvanceAfterAlphabetSuccess()
+        {
             if (alphabetIndex == 25) ShowHome(); else ShowAlphabet(alphabetIndex + 1);
+        }
+
+        void ShowAlphabetSuccessPrompt()
+        {
+            if (alphabetSuccessPrompt != null || content == null) return;
+            SaveAlphabetStep(alphabetRecognitionConfidence);
+            alphabetAdvanceDeadline = Time.unscaledTime + AlphabetAdvanceSeconds;
+            content.gameObject.SetActive(false);
+            alphabetSuccessModalRoot = new GameObject("Alphabet success modal layer").transform;
+            alphabetSuccessModalRoot.SetParent(board, false);
+            alphabetSuccessModalRoot.localPosition = new Vector3(0, 0, -.72f);
+            alphabetSuccessPrompt = ClassroomUi.Panel("Alphabet success prompt", alphabetSuccessModalRoot,
+                new Vector3(0, -.42f, 0), new Vector2(4.75f, 2.08f), new Color(.98f, 1f, .99f), .22f, true).transform;
+            ClassroomUi.Label("SIGN CORRECT!", alphabetSuccessPrompt, 0, .67f, .25f, ClassroomUi.Green,
+                TextAnchor.MiddleCenter);
+            var letter = ((char)('A' + alphabetIndex)).ToString();
+            ClassroomUi.Label($"{letter} confirmed  /  confidence {alphabetRecognitionConfidence:P0}",
+                alphabetSuccessPrompt, 0, .34f, .13f, ClassroomUi.Ink, TextAnchor.MiddleCenter, 4.2f);
+            var nextButton = ClassroomUi.Button(alphabetIndex == 25 ? "Finish  (5)" : "Next sign  (5)",
+                alphabetSuccessPrompt, 0, -.55f, 2.15f, AdvanceAfterAlphabetSuccess, true, .38f);
+            alphabetAdvanceCountdown = nextButton.GetComponentInChildren<TextMesh>();
+            tutor?.Say(alphabetIndex == 25 ? "Excellent. You completed the alphabet." : "Excellent. The next sign is opening now.", true);
+        }
+
+        void UpdateAlphabetSuccessPrompt()
+        {
+            if (alphabetSuccessPrompt == null) return;
+            if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.N) || Input.GetKeyDown(KeyCode.Space))
+            {
+                AdvanceAfterAlphabetSuccess();
+                return;
+            }
+            var remaining = Mathf.Max(0, Mathf.CeilToInt(alphabetAdvanceDeadline - Time.unscaledTime));
+            if (alphabetAdvanceCountdown != null)
+                alphabetAdvanceCountdown.text = remaining > 0
+                    ? alphabetIndex == 25 ? $"Finish  ({remaining})" : $"Next sign  ({remaining})"
+                    : "Opening…";
+            if (remaining <= 0) AdvanceAfterAlphabetSuccess();
         }
 
         static string AlphabetTip(string expected, string observed)
@@ -944,7 +1025,12 @@ namespace BCSignVR
                 else if (page != Page.Profiles) ShowHome();
             }
             if (page == Page.Profiles || page == Page.AddProfile) return;
-            if (page == Page.Alphabet) { UpdateAlphabet(); return; }
+            if (page == Page.Alphabet)
+            {
+                if (alphabetSuccessPrompt != null) UpdateAlphabetSuccessPrompt();
+                else UpdateAlphabet();
+                return;
+            }
             if (page == Page.Basics) { UpdateBasics(); return; }
             if (page == Page.Fingerspell) { UpdateFingerspell(); return; }
             if (page == Page.SaslPractice) { UpdateResearchPractice(); return; }
@@ -1489,6 +1575,7 @@ namespace BCSignVR
             else if (scenario == "input") CycleMode();
             else if (scenario == "alphabet") ShowAlphabet(0);
             else if (scenario == "alphabet-vr") { inputMode = InputMode.VR; ShowAlphabet(1); }
+            else if (scenario == "alphabet-success") ShowAlphabetSuccessPreview();
             else if (scenario.StartsWith("alphabet-", StringComparison.OrdinalIgnoreCase))
             {
                 var suffix = scenario.Substring("alphabet-".Length);
@@ -1514,6 +1601,14 @@ namespace BCSignVR
             feedbackText.text = "Correct! Bob matched your sign.";
             feedbackText.color = ClassroomUi.Green.linear;
             ShowSuccessPrompt();
+        }
+
+        void ShowAlphabetSuccessPreview()
+        {
+            inputMode = InputMode.Demo;
+            ShowAlphabet(2);
+            alphabetRecognitionConfidence = .92f;
+            ShowAlphabetSuccessPrompt();
         }
 
         static UnityWebRequest Request(string url, string method, string json)
