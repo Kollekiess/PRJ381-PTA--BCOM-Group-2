@@ -16,6 +16,18 @@ namespace BCSignVR
             if (current == null || !current.tracked) return "Raise your full hand so all fingers can be tracked.";
             var weakest = 1f;
             var hint = "Keep your whole hand visible and hold steady.";
+            var thumbShouldExtend = target != SimulatedHandPoseProvider.DemoPose.Fist;
+            if (TryThumbExtension(current, out var thumbExtension))
+            {
+                var thumbMatch = thumbShouldExtend ? thumbExtension : 1f - thumbExtension;
+                if (thumbMatch < weakest)
+                {
+                    weakest = thumbMatch;
+                    hint = thumbShouldExtend
+                        ? "Move your thumb away from your palm and keep it open."
+                        : "Lower your thumb and tuck it across your palm.";
+                }
+            }
             for (var i = 0; i < FingerStarts.Length; i++)
             {
                 if (!TryExtension(current, FingerStarts[i], out var extension))
@@ -25,7 +37,8 @@ namespace BCSignVR
                 var match = extend ? extension : 1 - extension;
                 if (match >= weakest) continue;
                 weakest = match;
-                hint = (extend ? "Straighten your " : "Gently curl your ") + FingerNames[i] + " finger.";
+                hint = (extend ? "Straighten your " : "Gently curl your ") + FingerNames[i] +
+                    (FingerNames[i] == "little" ? " (pinky)" : "") + " finger.";
             }
             return hint;
         }
@@ -81,6 +94,25 @@ namespace BCSignVR
             // joints. Reach adds tolerance for tracking noise and hand anatomy.
             var straightFromBend = 1f - Mathf.InverseLerp(50f, 170f, bend);
             var straightFromReach = Mathf.InverseLerp(.45f, .90f, reach);
+            extension = Mathf.Clamp01(.7f * straightFromBend + .3f * straightFromReach);
+            return Finite(extension);
+        }
+
+        static bool TryThumbExtension(HandPoseFrame frame, out float extension)
+        {
+            extension = 0f;
+            var first = frame.joints[3] - frame.joints[2];
+            var second = frame.joints[4] - frame.joints[3];
+            var third = frame.joints[5] - frame.joints[4];
+            var length = first.magnitude + second.magnitude + third.magnitude;
+            if (!Finite(length) || first.sqrMagnitude < 1e-12f ||
+                second.sqrMagnitude < 1e-12f || third.sqrMagnitude < 1e-12f)
+                return false;
+
+            var bend = Vector3.Angle(first, second) + Vector3.Angle(second, third);
+            var straightFromBend = 1f - Mathf.InverseLerp(35f, 155f, bend);
+            var straightFromReach = Mathf.InverseLerp(.42f, .88f,
+                Vector3.Distance(frame.joints[2], frame.joints[5]) / length);
             extension = Mathf.Clamp01(.7f * straightFromBend + .3f * straightFromReach);
             return Finite(extension);
         }

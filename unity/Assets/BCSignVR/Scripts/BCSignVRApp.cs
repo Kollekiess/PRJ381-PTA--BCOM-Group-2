@@ -17,9 +17,9 @@ namespace BCSignVR
         // Keep the tracked hand large enough to read at Quest distance while
         // preserving clear space for the board card's heading and border.
         const float BoardHandScale = 1.00f;
-        // Narrow regional signs need a little more visual weight than an open
-        // hand so Bob's example stays readable inside the same card.
-        const float ResearchHandScale = 1.25f;
+        // Keep the recorded regional poses comfortably inside the same card
+        // as the rest of the board artwork, including the tallest frames.
+        const float ResearchHandScale = .96f;
         static readonly Vector2[] ProfileCardPositions =
         {
             new(-2.12f, -.16f), new(0f, -.16f), new(2.12f, -.16f),
@@ -624,28 +624,19 @@ namespace BCSignVR
                 AdvanceAfterAlphabetSuccess();
                 return;
             }
-            if (inputMode != InputMode.Demo && !current.tracked)
-            {
-                alphabetStatus.text = "Bob needs to see your full hand before saving this step.";
-                tutor?.Say("Bring your whole hand into view first.", true);
-                return;
-            }
             var letter = ((char)('A' + alphabetIndex)).ToString();
             var expected = "TEAM_SASL_" + letter;
-            if (inputMode != InputMode.Demo &&
-                (alphabetRecognizedLabel != expected || alphabetRecognitionConfidence < .60f))
+            var validated = inputMode == InputMode.Demo ||
+                current.tracked && alphabetRecognizedLabel == expected && alphabetRecognitionConfidence >= .60f;
+            if (!validated)
             {
-                alphabetMistakes++;
-                var observed = alphabetRecognizedLabel.StartsWith("TEAM_SASL_")
-                    ? alphabetRecognizedLabel.Replace("TEAM_SASL_", "") : "unknown";
-                var tip = observed == "unknown"
-                    ? "Hold the whole hand still and make the letter more clearly before saving."
-                    : AlphabetTip(letter, observed);
-                alphabetStatus.text = observed == "unknown"
-                    ? $"The model hasn't confirmed {letter} yet. {tip}"
-                    : $"Not quite {letter}. The model sees {observed}. {tip}";
-                tutor?.CoachCorrection();
-                tutor?.Say(tip, true);
+                // Practised / next is also a skip control. Learners can move
+                // past a difficult sign and revisit it later instead of being
+                // trapped behind the model confidence gate.
+                alphabetStatus.text = $"{letter} skipped for now. You can revisit it from the alphabet lesson.";
+                tutor?.Say("Moving to the next sign. You can revisit this one later.", true);
+                SaveAlphabetStep(0f);
+                AdvanceAfterAlphabetSuccess();
                 return;
             }
             SaveAlphabetStep(inputMode == InputMode.Demo ? 0f : alphabetRecognitionConfidence);
@@ -700,7 +691,7 @@ namespace BCSignVR
             var nextButton = ClassroomUi.Button(alphabetIndex == 25 ? "Finish  (5)" : "Next sign  (5)",
                 alphabetSuccessPrompt, -1.10f, -.55f, 1.95f, AdvanceAfterAlphabetSuccess, true, .38f);
             alphabetAdvanceCountdown = nextButton.GetComponentInChildren<TextMesh>();
-            ClassroomUi.Button("Retry", alphabetSuccessPrompt, 1.10f, -.55f, 1.65f,
+            ClassroomUi.Button("Try again", alphabetSuccessPrompt, 1.10f, -.55f, 1.65f,
                 RetryAfterAlphabetSuccess, false, .38f);
             tutor?.Say(alphabetIndex == 25 ? "Excellent. You completed the alphabet." : "Excellent. The next sign is opening now.", true);
         }
@@ -1398,15 +1389,13 @@ namespace BCSignVR
             ClassroomUi.Label(entry.clipCount + " recorded clips  /  visual reference replay", content,
                 -3.06f, -.05f, .135f, ClassroomUi.Muted);
 
-            var playbackCard = ClassroomUi.Panel("Chantel captured word sequence", content, new Vector3(0, -.84f, 0),
-                new Vector2(6.16f, 1.66f), new Color(.94f, .98f, 1f), .16f, true).transform;
-            ClassroomUi.Label("CHANTEL CAPTURE  /  BOB-STYLE LANDMARK REPLAY", playbackCard, -3.05f, .58f, .10f,
-                ClassroomUi.DeepBlue, maxWidth: 5.9f);
+            ClassroomUi.Panel("Chantel captured word sequence", content, new Vector3(0, -.84f, 0),
+                new Vector2(6.16f, 1.66f), new Color(.94f, .98f, 1f), .16f, true);
             chantelLeftView = new HandSkeletonView("Chantel recorded left hand", content, new Color(.97f, .73f, .57f), true);
             chantelRightView = new HandSkeletonView("Chantel recorded right hand", content, new Color(.97f, .73f, .57f), true);
             ClassroomUi.Label("Replaying one of the uploaded 30-frame clips.", content, 0, -1.76f, .12f,
                 ClassroomUi.Ink, TextAnchor.MiddleCenter, 5.9f);
-            ClassroomUi.Label("The five-word classifier is trained separately and is not yet live Quest recognition.",
+            ClassroomUi.Label("Watch the captured movement, then replay or return to the word list.",
                 content, 0, -1.98f, .10f, ClassroomUi.Muted, TextAnchor.MiddleCenter, 6.1f);
             ClassroomUi.Button("<  Words", content, -2.35f, -2.22f, 1.45f, ShowChantelWords, height: .31f);
             ClassroomUi.Button("Replay", content, -.65f, -2.22f, 1.25f,
@@ -1450,7 +1439,11 @@ namespace BCSignVR
             // Play the attributed research landmark sequence on the board,
             // using the same Bob-style hand renderer as the learner card.
             targetView = new HandSkeletonView("Bob research example hand", content, new Color(.97f, .73f, .57f), true);
-            CreateLearnerHandPicture(learner, new Vector3(0, -.05f, -.12f), new Vector2(1.24f, 1.24f), "CartoonHandOpen");
+            // In Quest mode the learner card must remain empty until a real
+            // hand is tracked. The illustrated fallback is only for desktop
+            // and demo previews, so it cannot sit behind a live hand.
+            if (inputMode != InputMode.VR)
+                CreateLearnerHandPicture(learner, new Vector3(0, -.05f, -.12f), new Vector2(1.24f, 1.24f), "CartoonHandOpen");
             if (inputMode == InputMode.VR)
                 liveView = new HandSkeletonView("Research learner hand", content, new Color(.97f, .73f, .57f), true);
             feedbackText = ClassroomUi.Label("Try the movement at your pace.", content, -3.05f, -1.61f, .16f, ClassroomUi.Ink, maxWidth: 6.1f);
@@ -1490,7 +1483,7 @@ namespace BCSignVR
             var motion = references.GetPose(researchIndex, (Time.time - researchStarted) / duration, researchReference);
             if (targetView != null)
                 targetView.SetPose(researchReference,
-                    content.TransformPoint(new Vector3(-1.67f, -1.23f, -.20f) + motion),
+                    content.TransformPoint(new Vector3(-1.67f, -1.28f, -.20f) + motion),
                     Quaternion.Euler(0, 180, 0), ResearchHandScale);
             current.tracked = false; TryGetInputHand(current);
             webcamPreview?.SetBase64(inputMode == InputMode.Camera ? webcam.PreviewJpeg : "");
