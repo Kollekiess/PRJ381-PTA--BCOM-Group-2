@@ -30,7 +30,7 @@
 
 ## Latest verification — 26 October 2026
 
-- Passed: 57 Unity EditMode tests, including scaled-board hand geometry, source-independent cartoon anatomy, the Bob greeting copy, five-second one-shot dwell, controller-trigger/dwell interaction, headset-gaze menu fallback, the 80% alphabet auto-advance gate, and delayed network responses during profile switching.
+- Passed: 58 Unity EditMode tests, including scaled-board hand geometry, source-independent cartoon anatomy, the Bob greeting copy, five-second one-shot dwell, controller-trigger/dwell interaction, headset-gaze menu fallback, the 80% alphabet auto-advance gate, and delayed network responses during profile switching.
 - Passed: 8 backend, 29 webcam bridge, 5 ML, and 11 Quest helper tests. The helper tests cover reboot identity changes, reconnects, inactive apps, and cleanup.
 - Built current Mac sources and rendered all 46 smoke-test pages (20 named pages including the startup greeting, open/fist/point hand cases plus A–Z). Screenshot production is not proof that every physical controller/hand interaction is correct.
 - Built Windows x64 and checked both the executable and UnityPlayer.dll are x86-64, not ARM64. Windows runtime testing is still required on a Windows PC.
