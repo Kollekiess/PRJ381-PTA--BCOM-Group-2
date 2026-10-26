@@ -42,6 +42,25 @@ namespace BCSignVR.Tests
         }
 
         [Test]
+        public void ChantelWordPlaybackKeepsEveryCapturedFrameVisibleWithoutHandStreamJumps()
+        {
+            var library = new SaslWordPlaybackLibrary();
+            var left = new HandPoseFrame();
+            var right = new HandPoseFrame();
+            for (var index = 0; index < library.Count; index++)
+            {
+                for (var frame = 0; frame < library.FrameCount; frame++)
+                {
+                    var phase = frame / (float)(library.FrameCount - 1);
+                    Assert.IsTrue(library.GetPoses(index, phase, left, right),
+                        $"The {library.Label(index)} replay dropped its hand at captured frame {frame}.");
+                    Assert.That(left.tracked ^ right.tracked, Is.True,
+                        $"The {library.Label(index)} replay should keep its single captured hand on one stable board side at frame {frame}.");
+                }
+            }
+        }
+
+        [Test]
         public void QuestAlphabetTemplatesContainTheCompleteAtoZLabelSet()
         {
             var asset = UnityEngine.Resources.Load<UnityEngine.TextAsset>("sasl_templates_quest");

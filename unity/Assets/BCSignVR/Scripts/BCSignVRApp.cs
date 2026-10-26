@@ -1347,7 +1347,7 @@ namespace BCSignVR
                 content, -3.06f, .22f, .14f, ClassroomUi.Muted, maxWidth: 6.25f);
             ClassroomUi.Panel("Word sign note", content, new Vector3(0, -.10f, 0), new Vector2(6.16f, .32f),
                 new Color(.94f, .97f, .99f), .09f, true);
-            ClassroomUi.Label("Visual reference  /  choose a phrase to replay the captured hand movement  /  Quest word recognition is next",
+            ClassroomUi.Label("Visual reference  /  replay each reviewed hand movement  /  live practice is in Classroom",
                 content, 0, -.10f, .11f, ClassroomUi.DeepBlue, TextAnchor.MiddleCenter, 5.95f);
 
             for (var i = 0; i < ChantelWordCatalog.Count; i++)

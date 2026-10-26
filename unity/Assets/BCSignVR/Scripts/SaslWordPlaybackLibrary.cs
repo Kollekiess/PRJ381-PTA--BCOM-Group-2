@@ -58,7 +58,11 @@ namespace BCSignVR
             FrameCount = Mathf.Max(1, playback?.frameCount ?? 30);
             var valid = new List<Word>();
             foreach (var word in playback?.words ?? Array.Empty<Word>())
-                if (IsValid(word)) valid.Add(word);
+            {
+                if (!IsValid(word)) continue;
+                StabilizeCapturedHands(word);
+                valid.Add(word);
+            }
             words = valid.ToArray();
         }
 
@@ -146,6 +150,70 @@ namespace BCSignVR
             foreach (var frame in word.frames)
                 if (frame == null || frame.features == null || frame.features.Length != 126) return false;
             return true;
+        }
+
+        // The uploaded word clips are single-hand recordings, but the hand
+        // detector occasionally writes one frame into the opposite handedness
+        // stream or drops a frame altogether. Keep the visual replay stable:
+        // choose the stream used by most frames, move short handedness swaps
+        // into it, and interpolate gaps between two valid samples.
+        static void StabilizeCapturedHands(Word word)
+        {
+            var leftCount = 0;
+            var rightCount = 0;
+            var hasTwoHands = false;
+            foreach (var frame in word.frames)
+            {
+                var left = HasHand(frame.features, 0);
+                var right = HasHand(frame.features, 63);
+                if (left) leftCount++;
+                if (right) rightCount++;
+                hasTwoHands |= left && right;
+            }
+
+            // Preserve genuinely two-handed clips exactly as uploaded.
+            if (!hasTwoHands)
+            {
+                var primaryOffset = rightCount > leftCount ? 63 : 0;
+                var secondaryOffset = primaryOffset == 0 ? 63 : 0;
+                foreach (var frame in word.frames)
+                {
+                    if (HasHand(frame.features, primaryOffset) || !HasHand(frame.features, secondaryOffset)) continue;
+                    Array.Copy(frame.features, secondaryOffset, frame.features, primaryOffset, 63);
+                    Array.Clear(frame.features, secondaryOffset, 63);
+                }
+            }
+
+            FillInteriorGaps(word.frames, 0);
+            FillInteriorGaps(word.frames, 63);
+        }
+
+        static void FillInteriorGaps(Frame[] frames, int offset)
+        {
+            for (var index = 1; index < frames.Length - 1; index++)
+            {
+                if (HasHand(frames[index].features, offset)) continue;
+                var previous = index - 1;
+                while (previous >= 0 && !HasHand(frames[previous].features, offset)) previous--;
+                var next = index + 1;
+                while (next < frames.Length && !HasHand(frames[next].features, offset)) next++;
+                if (previous < 0 || next >= frames.Length) continue;
+
+                var span = next - previous;
+                var amount = (index - previous) / (float)span;
+                for (var feature = 0; feature < 63; feature++)
+                    frames[index].features[offset + feature] = Mathf.Lerp(
+                        frames[previous].features[offset + feature],
+                        frames[next].features[offset + feature], amount);
+            }
+        }
+
+        static bool HasHand(float[] features, int offset)
+        {
+            if (features == null || features.Length < offset + 63) return false;
+            for (var i = 0; i < 63; i++)
+                if (Mathf.Abs(features[offset + i]) > .0001f) return true;
+            return false;
         }
 
         bool HasIndex(int index) => index >= 0 && index < words.Length;
