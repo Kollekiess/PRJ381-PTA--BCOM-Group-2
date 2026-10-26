@@ -97,6 +97,9 @@ namespace BCSignVR
 
             output.joints[0] = Vector3.zero;
             output.joints[1] = (points[0] + points[5] + points[9] + points[13] + points[17]) / 5f;
+            // MediaPipe has four thumb landmarks after the wrist (CMC, MCP,
+            // IP, tip). Map all four so the cartoon reference keeps the full
+            // thumb instead of ending at the interphalangeal joint.
             for (var i = 0; i < 4; i++) output.joints[2 + i] = points[1 + i];
             MapFinger(output, 6, 5);
             MapFinger(output, 11, 9);

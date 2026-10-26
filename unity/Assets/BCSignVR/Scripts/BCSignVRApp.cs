@@ -12,6 +12,12 @@ namespace BCSignVR
         public enum InputMode { Camera, VR, Demo }
         enum Page { Profiles, AddProfile, Home, Practice, Results, Progress, Help, Sasl, Input, SaslPractice, Alphabet, Basics, Fingerspell }
         const int ProfilesPerPage = 5;
+        // Keep the tracked hand large enough to read at Quest distance while
+        // preserving clear space for the board card's heading and border.
+        const float BoardHandScale = 1.00f;
+        // Narrow regional signs need a little more visual weight than an open
+        // hand so Bob's example stays readable inside the same card.
+        const float ResearchHandScale = 1.25f;
         static readonly Vector2[] ProfileCardPositions =
         {
             new(-2.12f, -.16f), new(0f, -.16f), new(2.12f, -.16f),
@@ -74,6 +80,9 @@ namespace BCSignVR
         float successMatch;
         string token, saveStatus = "Progress saved";
         bool apiConnected;
+        int profileRevision;
+        Coroutine backendConnection;
+        string backendBaseUrl = "http://127.0.0.1:8787";
         bool remoteProgressLoaded;
         int remoteCompleted;
         float remoteAverage;
@@ -277,7 +286,7 @@ namespace BCSignVR
             if (activeProfile == null) { ShowProfiles(); return; }
             navigationRoot.gameObject.SetActive(true);
             BeginPage(Page.Home);
-            tutor?.Say("Welcome! Let's learn one hand shape at a time.", true);
+            tutor?.Say(TutorAvatar.WelcomeMessage, true);
             ClassroomUi.Label($"LEARNER  /  {activeProfile.displayName}", content, 3.05f, .68f, .12f,
                 ClassroomUi.DeepBlue, TextAnchor.MiddleRight, 2.25f);
             ClassroomUi.Label("A little practice.\nA new way to connect.", content, -3.08f, .28f, .31f,
@@ -447,6 +456,9 @@ namespace BCSignVR
 
         void SelectProfile(LearnerProfile profile, bool connectBackend = true)
         {
+            profileRevision++;
+            if (backendConnection != null) StopCoroutine(backendConnection);
+            backendConnection = null;
             activeProfile = profile;
             profileKeyboard = null;
             history = new LocalSessionStore(profile.id == LearnerProfileStore.DefaultProfileId
@@ -454,12 +466,15 @@ namespace BCSignVR
                 : System.IO.Path.Combine(Application.persistentDataPath, "profiles", profile.id, "sessions.json"));
             token = null;
             apiConnected = false;
+            syncing = false;
+            savingFailed = false;
             remoteProgressLoaded = false;
             remoteCompleted = 0;
             remoteAverage = 0;
             if (navigationRoot != null) navigationRoot.gameObject.SetActive(true);
             ShowHome();
-            if (connectBackend && !preview) StartCoroutine(ConnectBackend());
+            if (connectBackend && !preview)
+                backendConnection = StartCoroutine(MaintainBackendConnection(profileRevision));
         }
 
         void ShowAlphabet(int index)
@@ -528,8 +543,8 @@ namespace BCSignVR
             UpdateAlphabetRecognition();
             webcamPreview?.SetBase64(inputMode == InputMode.Camera ? webcam.PreviewJpeg : "");
             if (liveView != null)
-                liveView.SetLearnerPose(current, content.TransformPoint(new Vector3(1.67f, -1.19f, -.20f)),
-                    Quaternion.Euler(0, 180, 0), .90f);
+                liveView.SetLearnerPose(current, content.TransformPoint(new Vector3(1.67f, -1.27f, -.20f)),
+                    Quaternion.Euler(0, 180, 0), BoardHandScale);
             UpdateLearnerHandPicture("CartoonHand" + letter);
             trackingText.text = current.tracked ? inputMode == InputMode.Demo ? "YOUR DEMO HAND  /  RIGHT" : inputMode == InputMode.Camera ? WebcamHandLabel() : "YOUR VR HAND  /  RIGHT  /  LIVE" : inputMode == InputMode.Camera && !webcam.IsReceiving ?
                 "CAMERA  /  WAITING  /  RIGHT HAND" : "YOUR RIGHT HAND  /  NOT VISIBLE";
@@ -716,8 +731,8 @@ namespace BCSignVR
             UpdateAlphabetRecognition();
             webcamPreview?.SetBase64(inputMode == InputMode.Camera ? webcam.PreviewJpeg : "");
             if (liveView != null)
-                liveView.SetLearnerPose(current, content.TransformPoint(new Vector3(1.67f, -1.19f, -.20f)),
-                    Quaternion.Euler(0, 180, 0), .90f);
+                liveView.SetLearnerPose(current, content.TransformPoint(new Vector3(1.67f, -1.27f, -.20f)),
+                    Quaternion.Euler(0, 180, 0), BoardHandScale);
             UpdateLearnerHandPicture("CartoonHand" + fingerspellLetters[fingerspellIndex]);
             trackingText.text = current.tracked ? inputMode == InputMode.Camera ? WebcamHandLabel() : "YOUR HAND  /  RIGHT  /  LIVE" :
                 inputMode == InputMode.Camera && !webcam.IsReceiving ? "CAMERA  /  WAITING  /  RIGHT HAND" : "YOUR RIGHT HAND  /  NOT VISIBLE";
@@ -803,8 +818,8 @@ namespace BCSignVR
             TryGetInputHand(current);
             webcamPreview?.SetBase64(inputMode == InputMode.Camera ? webcam.PreviewJpeg : "");
             if (liveView != null)
-                liveView.SetLearnerPose(current, content.TransformPoint(new Vector3(1.67f, -1.18f, -.20f)),
-                    Quaternion.Euler(0, 180, 0), .90f);
+                liveView.SetLearnerPose(current, content.TransformPoint(new Vector3(1.67f, -1.26f, -.20f)),
+                    Quaternion.Euler(0, 180, 0), BoardHandScale);
             UpdateLearnerHandPicture("CartoonHandGreeting");
             trackingText.text = current.tracked ? inputMode == InputMode.Demo ? "YOUR DEMO HAND  /  RIGHT" : inputMode == InputMode.Camera ? WebcamHandLabel() : "YOUR VR HAND  /  RIGHT  /  LIVE" : inputMode == InputMode.Camera && !webcam.IsReceiving ?
                 "CAMERA  /  WAITING  /  RIGHT HAND" : "YOUR RIGHT HAND  /  NOT VISIBLE";
@@ -950,9 +965,9 @@ namespace BCSignVR
             // Small, slow wrist sway invites the learner to inspect a three-dimensional hand.
             var angle = Mathf.Sin((Time.time - replayStarted) * .8f) * 12f;
             if (targetView != null)
-                targetView.SetPose(target, content.TransformPoint(new Vector3(-1.67f, -1.18f, -.20f)), Quaternion.Euler(0, 180 + angle, 0), .92f);
+                targetView.SetPose(target, content.TransformPoint(new Vector3(-1.67f, -1.26f, -.20f)), Quaternion.Euler(0, 180 + angle, 0), BoardHandScale);
             if (liveView != null)
-                liveView.SetLearnerPose(current, content.TransformPoint(new Vector3(1.67f, -1.18f, -.20f)), Quaternion.Euler(0, 180, 0), .92f);
+                liveView.SetLearnerPose(current, content.TransformPoint(new Vector3(1.67f, -1.26f, -.20f)), Quaternion.Euler(0, 180, 0), BoardHandScale);
             var handTexture = lessonIndex == 0 ? "CartoonHandOpen" : lessonIndex == 1 ? "CartoonHandFist" : "CartoonHandPoint";
             UpdateLearnerHandPicture(handTexture);
             var match = PracticeMatch();
@@ -1268,12 +1283,12 @@ namespace BCSignVR
             var motion = references.GetPose(researchIndex, (Time.time - researchStarted) / duration, researchReference);
             if (targetView != null)
                 targetView.SetPose(researchReference,
-                    content.TransformPoint(new Vector3(-1.67f, -1.15f, -.20f) + motion),
-                    Quaternion.Euler(0, 180, 0), .87f);
+                    content.TransformPoint(new Vector3(-1.67f, -1.23f, -.20f) + motion),
+                    Quaternion.Euler(0, 180, 0), ResearchHandScale);
             current.tracked = false; TryGetInputHand(current);
             webcamPreview?.SetBase64(inputMode == InputMode.Camera ? webcam.PreviewJpeg : "");
             if (liveView != null)
-                liveView.SetLearnerPose(current, content.TransformPoint(new Vector3(1.67f, -1.15f, -.20f)), Quaternion.Euler(0, 180, 0), .87f);
+                liveView.SetLearnerPose(current, content.TransformPoint(new Vector3(1.67f, -1.23f, -.20f)), Quaternion.Euler(0, 180, 0), BoardHandScale);
             UpdateLearnerHandPicture("CartoonHandOpen");
             trackingText.text = current.tracked ? inputMode == InputMode.Demo ? "YOUR DEMO HAND  /  RIGHT" : inputMode == InputMode.Camera ? WebcamHandLabel() : "YOUR VR HAND  /  RIGHT  /  LIVE" : inputMode == InputMode.Camera && !webcam.IsReceiving ? "CAMERA  /  WAITING  /  RIGHT HAND" :
                 "YOUR HAND  /  NOT VISIBLE";
@@ -1295,11 +1310,24 @@ namespace BCSignVR
         {
             while (page == Page.Sasl)
             {
-                var tracked = webcam.TryGetRightHand(current);
-                var label = webcam.RecognizedLabel;
-                trackingText.text = !tracked ? !webcam.IsReceiving ? "Camera is not sending frames yet." : $"Show your {HandName()} hand to the webcam." :
-                    label.StartsWith("RESEARCH_SASL_") ? "Possible sign: " + label.Replace("RESEARCH_SASL_", "").Replace('_', ' ') +
-                    $"  /  similarity {webcam.RecognitionConfidence:P0}" : "Watching your movement...";
+                if (inputMode == InputMode.Camera)
+                {
+                    var tracked = webcam.TryGetRightHand(current);
+                    var label = webcam.RecognizedLabel;
+                    trackingText.text = !tracked ? !webcam.IsReceiving ? "Camera is not sending frames yet." : $"Show your {HandName()} hand to the webcam." :
+                        label.StartsWith("RESEARCH_SASL_") ? "Possible sign: " + label.Replace("RESEARCH_SASL_", "").Replace('_', ' ') +
+                        $"  /  similarity {webcam.RecognitionConfidence:P0}" : "Watching your movement...";
+                }
+                else if (inputMode == InputMode.VR)
+                {
+                    current.tracked = false;
+                    TryGetInputHand(current);
+                    trackingText.text = current.tracked
+                        ? "Quest hand tracking is ready. Choose a sign to practise."
+                        : "Raise your RIGHT hand for Quest tracking, then choose a sign.";
+                }
+                else
+                    trackingText.text = "Choose a sign to watch Bob's example, then practise at your pace.";
                 yield return new WaitForSeconds(.1f);
             }
         }
@@ -1322,34 +1350,52 @@ namespace BCSignVR
             Debug.Log($"BCSignVR camera created: enabled={camera.enabled}, stereo={camera.stereoTargetEye}, cullingMask={camera.cullingMask}");
         }
 
+        IEnumerator MaintainBackendConnection(int revision)
+        {
+            while (revision == profileRevision)
+            {
+                if (!apiConnected) yield return ConnectBackend();
+                else if (history.PendingCount > 0) yield return SyncPending();
+                yield return new WaitForSecondsRealtime(30f);
+            }
+        }
+
         IEnumerator ConnectBackend()
         {
             if (activeProfile == null) yield break;
-            var suffix = activeProfile.id == LearnerProfileStore.DefaultProfileId ? "" : "-" + activeProfile.id;
+            var revision = profileRevision;
+            var profile = activeProfile;
+            var suffix = profile.id == LearnerProfileStore.DefaultProfileId ? "" : "-" + profile.id;
             var email = $"demo-{SystemInfo.deviceUniqueIdentifier}{suffix}@local.bcsignvr";
             var payload = JsonUtility.ToJson(new AuthRequest
             {
-                name = activeProfile.displayName,
+                name = profile.displayName,
                 email = email,
                 password = "local-demo-password"
             });
-            using var register = Request("http://127.0.0.1:8787/api/auth/register", "POST", payload);
+            using var register = Request(backendBaseUrl + "/api/auth/register", "POST", payload);
             yield return register.SendWebRequest();
+            if (revision != profileRevision) yield break;
             var response = register.downloadHandler.text;
             if (register.responseCode == 409)
             {
-                using var login = Request("http://127.0.0.1:8787/api/auth/login", "POST", payload);
+                using var login = Request(backendBaseUrl + "/api/auth/login", "POST", payload);
                 yield return login.SendWebRequest();
+                if (revision != profileRevision) yield break;
                 if (login.result != UnityWebRequest.Result.Success) { UpdateConnectionLabel(); yield break; }
                 response = login.downloadHandler.text;
             }
             else if (register.result != UnityWebRequest.Result.Success) { UpdateConnectionLabel(); yield break; }
-            token = JsonUtility.FromJson<AuthResponse>(response).token;
+            AuthResponse auth = null;
+            try { auth = JsonUtility.FromJson<AuthResponse>(response); }
+            catch (Exception error) { Debug.LogWarning("Account connection could not be read: " + error.Message); }
+            token = auth?.token;
             apiConnected = !string.IsNullOrEmpty(token);
             UpdateConnectionLabel();
             if (apiConnected && !preview)
             {
                 yield return SyncPending();
+                if (revision != profileRevision) yield break;
                 yield return RefreshRemoteProgress();
             }
         }
@@ -1357,9 +1403,11 @@ namespace BCSignVR
         IEnumerator RefreshRemoteProgress()
         {
             if (!apiConnected || string.IsNullOrEmpty(token)) yield break;
-            using var request = Request("http://127.0.0.1:8787/api/progress", "GET", null);
+            var revision = profileRevision;
+            using var request = Request(backendBaseUrl + "/api/progress", "GET", null);
             request.SetRequestHeader("Authorization", $"Bearer {token}");
             yield return request.SendWebRequest();
+            if (revision != profileRevision) yield break;
             if (request.result != UnityWebRequest.Result.Success) yield break;
             try
             {
@@ -1375,29 +1423,49 @@ namespace BCSignVR
         IEnumerator SyncPending()
         {
             if (syncing || !apiConnected || preview) yield break;
+            var revision = profileRevision;
+            var store = history;
+            var sessionToken = token;
             syncing = true;
-            foreach (var record in history.Pending)
+            try
             {
-                using var request = Request("http://127.0.0.1:8787/api/sessions", "POST", JsonUtility.ToJson(record));
-                request.SetRequestHeader("Authorization", $"Bearer {token}");
-                yield return request.SendWebRequest();
-                if (request.result != UnityWebRequest.Result.Success) { apiConnected = false; break; }
-                try { history.MarkSynced(record.id); saveStatus = "Progress saved and synced"; }
-                catch (Exception error) { Debug.LogWarning(error.Message); break; }
+                foreach (var record in store.Pending)
+                {
+                    if (revision != profileRevision) yield break;
+                    using var request = Request(backendBaseUrl + "/api/sessions", "POST", JsonUtility.ToJson(record));
+                    request.SetRequestHeader("Authorization", $"Bearer {sessionToken}");
+                    yield return request.SendWebRequest();
+                    if (revision != profileRevision) yield break;
+                    if (request.result != UnityWebRequest.Result.Success) { apiConnected = false; break; }
+                    try { store.MarkSynced(record.id); saveStatus = "Progress saved and synced"; }
+                    catch (Exception error) { Debug.LogWarning(error.Message); break; }
+                }
             }
-            syncing = false; UpdateConnectionLabel();
+            finally
+            {
+                if (revision == profileRevision)
+                {
+                    syncing = false;
+                    UpdateConnectionLabel();
+                }
+            }
         }
 
         void UpdateConnectionLabel()
         {
             if (connectionText == null) return;
+            if (page == Page.Profiles || page == Page.AddProfile)
+            {
+                connectionText.text = "Choose a learner";
+                return;
+            }
             connectionText.text = savingFailed ? "Save needs attention" : apiConnected && history.PendingCount == 0 ? "Progress sync ready" : "Progress saved";
             connectionText.color = (savingFailed ? ClassroomFactory.Coral : ClassroomUi.Muted).linear;
         }
 
         IEnumerator CapturePreview(string path)
         {
-            var scenario = Environment.GetEnvironmentVariable("BCSIGNVR_PREVIEW_PAGE");
+            var scenario = Environment.GetEnvironmentVariable("BCSIGNVR_PREVIEW_PAGE") ?? "";
             if (scenario == "profiles") ShowProfiles();
             else if (scenario == "add-profile") ShowAddProfile();
             else if (scenario == "practice" || scenario == "missing")
@@ -1410,6 +1478,13 @@ namespace BCSignVR
             else if (scenario == "sasl-bloemfontein") { inputMode = InputMode.VR; ShowResearchPractice(1); }
             else if (scenario == "sasl-pretoria") { inputMode = InputMode.VR; ShowResearchPractice(2); }
             else if (scenario == "tracked-hand-vr") { inputMode = InputMode.VR; ShowAlphabet(1); }
+            else if (scenario == "tracked-hand-fist" || scenario == "tracked-hand-point")
+            {
+                inputMode = InputMode.VR;
+                simulated.CurrentPose = scenario == "tracked-hand-fist"
+                    ? SimulatedHandPoseProvider.DemoPose.Fist : SimulatedHandPoseProvider.DemoPose.Point;
+                ShowAlphabet(scenario == "tracked-hand-fist" ? 0 : 3);
+            }
             else if (scenario == "input") CycleMode();
             else if (scenario == "alphabet") ShowAlphabet(0);
             else if (scenario == "alphabet-vr") { inputMode = InputMode.VR; ShowAlphabet(1); }

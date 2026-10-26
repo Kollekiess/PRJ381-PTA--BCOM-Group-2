@@ -6,6 +6,7 @@ namespace BCSignVR
     /// <summary>A small, original classroom guide built entirely from rounded geometry.</summary>
     public sealed class TutorAvatar : MonoBehaviour
     {
+        public const string WelcomeMessage = "Welcome! Let's learn one hand sign at a time.";
         static readonly Color Skin = new(.91f, .68f, .48f);
         static readonly Color SkinLight = new(.98f, .77f, .57f);
         static readonly Color SkinShadow = new(.72f, .46f, .32f);
@@ -70,7 +71,7 @@ namespace BCSignVR
                 new Vector2(.20f, .20f), Color.white, .03f).transform;
             tail.localRotation = Quaternion.Euler(0, 0, 45);
             speech = ClassroomUi.Label("", bubble, 0, .01f, .13f, ClassroomUi.Ink, TextAnchor.MiddleCenter, 1.65f);
-            Say("Welcome! Let's learn one hand shape at a time.", true);
+            Say(WelcomeMessage, true);
             // Soft sole and toe layers keep the feet readable against a pale floor.
             Shape("Left Sole", transform, new(-.17f, .065f, -.055f), new(.28f, .10f, .43f), White);
             Shape("Right Sole", transform, new(.17f, .065f, -.055f), new(.28f, .10f, .43f), White);

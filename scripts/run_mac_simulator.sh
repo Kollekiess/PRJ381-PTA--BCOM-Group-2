@@ -4,7 +4,13 @@ set -euo pipefail
 PROJECT_ROOT="${0:A:h:h}"
 BACKEND_LOG="/tmp/bcsignvr-backend.log"
 RUNTIME_JSON="/Applications/MetaXRSimulator.app/Contents/Resources/MetaXRSimulator/meta_openxr_simulator.json"
-APP_BINARY="$PROJECT_ROOT/unity/Builds/macOS/BCSignVR.app/Contents/MacOS/BCSignVR Standalone"
+APP_BUNDLE="$PROJECT_ROOT/unity/Builds/macOS/BCSignVR.app"
+APP_EXECUTABLE="$(/usr/libexec/PlistBuddy -c 'Print CFBundleExecutable' "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true)"
+APP_BINARY="$APP_BUNDLE/Contents/MacOS/$APP_EXECUTABLE"
+if [[ -z "$APP_EXECUTABLE" || ! -f "$APP_BINARY" || ! -x "$APP_BINARY" ]]; then
+  print -u2 "Build the Mac classroom first: BCSignVR > Build macOS Demo."
+  exit 1
+fi
 OPENXR_LOADER_DIR="$PROJECT_ROOT/unity/Builds/macOS/BCSignVR.app/Contents/PlugIns/ARM64"
 WEBCAM_LOG="/tmp/bcsignvr-webcam.log"
 
@@ -18,8 +24,8 @@ if [[ -x "$PROJECT_ROOT/.venv/bin/python" ]] && ! pgrep -f "webcam/hand_bridge.p
       if "$PROJECT_ROOT/.venv/bin/python" "$PROJECT_ROOT/webcam/hand_bridge.py" >>"$WEBCAM_LOG" 2>&1; then
         break
       else
-        status=$?
-        print "Webcam tracker stopped ($status); retrying in 2 seconds." >>"$WEBCAM_LOG"
+        camera_exit_code=$?
+        print "Webcam tracker stopped ($camera_exit_code); retrying in 2 seconds." >>"$WEBCAM_LOG"
         sleep 2
       fi
     done

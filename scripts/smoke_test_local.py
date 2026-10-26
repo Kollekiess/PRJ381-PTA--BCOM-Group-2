@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import plistlib
 import sqlite3
 import subprocess
 import sys
@@ -13,7 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DB = ROOT / "backend" / "data" / "bcsignvr.sqlite3"
-APP = ROOT / "unity" / "Builds" / "macOS" / "BCSignVR.app" / "Contents" / "MacOS" / "BCSignVR Standalone"
+APP_CONTENTS = ROOT / "unity" / "Builds" / "macOS" / "BCSignVR.app" / "Contents"
 
 
 def check(name: str, condition: bool, detail: str) -> None:
@@ -30,7 +31,10 @@ def main() -> None:
     except Exception as error:
         check("local API", False, f"start the classroom launcher first ({error})")
 
-    check("Mac build", APP.is_file() and APP.stat().st_mode & 0o111, str(APP))
+    with (APP_CONTENTS / "Info.plist").open("rb") as plist_file:
+        executable = plistlib.load(plist_file)["CFBundleExecutable"]
+    app = APP_CONTENTS / "MacOS" / executable
+    check("Mac build", app.is_file() and app.stat().st_mode & 0o111, str(app))
     check("progress database", DB.is_file(), str(DB))
     with sqlite3.connect(DB) as connection:
         lesson_count = connection.execute("SELECT COUNT(*) FROM lessons").fetchone()[0]

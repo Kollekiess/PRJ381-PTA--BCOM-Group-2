@@ -179,10 +179,71 @@ namespace BCSignVR
         }
         // Desktop builds also receive Unity's native collider click. Keeping this
         // path alongside BoardPointer makes the classroom usable when the cursor
-        // is over a modal button, while Press's debounce prevents double actions.
+        // is over a modal button. Do not invoke again on mouse-up: a long press
+        // used to navigate twice after the debounce window expired.
         void OnMouseDown() => Press();
-        void OnMouseUpAsButton() => Press();
         void OnDisable() { if (selected) Focus(false); }
+    }
+
+    /// <summary>Five-second, source-aware dwell selection used by the VR pointer.</summary>
+    public sealed class BoardDwellSelection
+    {
+        public const float DurationSeconds = 5f;
+        BoardButton target;
+        int sourceId = int.MinValue;
+        float elapsed;
+        bool fired;
+
+        public float Advance(BoardButton nextTarget, int nextSourceId, float deltaTime,
+            out BoardButton pressTarget)
+        {
+            pressTarget = null;
+            if (!nextTarget || !nextTarget.isActiveAndEnabled)
+            {
+                Reset();
+                return 0f;
+            }
+
+            if (nextTarget != target || nextSourceId != sourceId)
+            {
+                target = nextTarget;
+                sourceId = nextSourceId;
+                elapsed = 0f;
+                fired = false;
+            }
+            else if (!fired)
+            {
+                elapsed += Mathf.Max(0f, deltaTime);
+            }
+
+            var progress = Mathf.Clamp01(elapsed / DurationSeconds);
+            if (progress >= 1f && !fired)
+            {
+                fired = true;
+                pressTarget = target;
+            }
+            return progress;
+        }
+
+        public void Press(BoardButton selected, int selectedSourceId)
+        {
+            if (!selected || !selected.isActiveAndEnabled) return;
+            // Keep this target consumed until the pointer leaves it. Resetting
+            // here used to start another countdown on Replay and toggle buttons.
+            target = selected;
+            sourceId = selectedSourceId;
+            elapsed = DurationSeconds;
+            fired = true;
+            selected.Press();
+        }
+
+        public void Reset()
+        {
+            target = null;
+            sourceId = int.MinValue;
+            elapsed = 0f;
+            fired = false;
+        }
     }
 
     public sealed class BoardPointer : MonoBehaviour
@@ -223,10 +284,7 @@ namespace BCSignVR
 
         BoardButton focused;
         BoardButton keyboardFocus;
-        BoardButton dwellTarget;
-        int dwellSourceId = int.MinValue;
-        float dwellElapsed;
-        bool dwellFired;
+        readonly BoardDwellSelection dwellSelection = new();
         int selectedIndex = -1;
         readonly Dictionary<int, bool> previousPressState = new();
         int activeSourceId = int.MinValue;
@@ -582,57 +640,21 @@ namespace BCSignVR
             }
             if (justPressed && pressTarget)
             {
-                var target = pressTarget;
-                ResetDwell();
-                target.Press();
+                dwellSelection.Press(pressTarget, activeSourceId);
             }
             else if (dwellPressTarget)
             {
-                var target = dwellPressTarget;
-                ResetDwell();
-                target.Press();
+                dwellSelection.Press(dwellPressTarget, activeSourceId);
             }
             if (Input.GetKeyDown(KeyCode.Return)) { var target = keyboardFocus ? keyboardFocus : focused; if (target) target.Press(); }
         }
 
         float UpdateDwell(BoardButton target, int sourceId, out BoardButton pressTarget)
         {
-            pressTarget = null;
-            if (!target || !target.isActiveAndEnabled)
-            {
-                ResetDwell();
-                return 0f;
-            }
-
-            if (target != dwellTarget || sourceId != dwellSourceId)
-            {
-                dwellTarget = target;
-                dwellSourceId = sourceId;
-                dwellElapsed = 0f;
-                dwellFired = false;
-            }
-            else if (!dwellFired)
-            {
-                dwellElapsed += Time.unscaledDeltaTime;
-            }
-
-            const float dwellSeconds = 5f;
-            var progress = Mathf.Clamp01(dwellElapsed / dwellSeconds);
-            if (progress >= 1f && !dwellFired)
-            {
-                dwellFired = true;
-                pressTarget = target;
-            }
-            return progress;
+            return dwellSelection.Advance(target, sourceId, Time.unscaledDeltaTime, out pressTarget);
         }
 
-        void ResetDwell()
-        {
-            dwellTarget = null;
-            dwellSourceId = int.MinValue;
-            dwellElapsed = 0f;
-            dwellFired = false;
-        }
+        void ResetDwell() => dwellSelection.Reset();
 
         void BuildVrCandidates()
         {

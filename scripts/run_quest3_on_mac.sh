@@ -5,6 +5,7 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APK="$PROJECT_ROOT/unity/Builds/Quest/BCSignVR-Quest3.apk"
 PACKAGE="za.ac.belgiumcampus.bcsignvr"
 ADB_BIN="${ADB_BIN:-$(command -v adb || true)}"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 if [[ ! -f "$APK" ]]; then
   echo "Quest APK not found. Run scripts/build_quest3_apk.sh first." >&2
@@ -16,33 +17,63 @@ if [[ -z "$ADB_BIN" ]]; then
 fi
 
 device_list="$("$ADB_BIN" devices | awk '$2 == "device" { print $1 }')"
+if [[ -z "$device_list" ]]; then
+  echo "No authorized Quest found. Connect USB and accept USB debugging in the headset." >&2
+  exit 1
+fi
 DEVICES=("${(@f)device_list}")
 if (( ${#DEVICES[@]} == 0 )); then
   echo "No Quest 3 found. Connect it by USB, enable Developer Mode, and accept USB debugging in the headset." >&2
   exit 1
 fi
 if (( ${#DEVICES[@]} > 1 )); then
-  echo "Multiple Android devices found; using ${DEVICES[0]}. Set ANDROID_SERIAL to choose another." >&2
+  if [[ -z "${ANDROID_SERIAL:-}" ]]; then
+    echo "Multiple Android devices found. Set ANDROID_SERIAL to your Quest serial." >&2
+    exit 1
+  fi
 fi
-SERIAL="${ANDROID_SERIAL:-${DEVICES[0]}}"
+SERIAL="${ANDROID_SERIAL:-${DEVICES[1]}}"
 
-echo "Installing BCSignVR on Quest 3 ($SERIAL)..."
+awake_pid=""
+cleanup() {
+  if [[ -n "$awake_pid" ]]; then
+    kill "$awake_pid" 2>/dev/null || true
+    wait "$awake_pid" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+echo "Installing signzzZ on Quest 3 ($SERIAL)..."
 "$ADB_BIN" -s "$SERIAL" install -r "$APK" >/dev/null
 "$ADB_BIN" -s "$SERIAL" shell monkey -p "$PACKAGE" 1 >/dev/null
+if [[ "${QUEST_KEEP_AWAKE:-1}" == 1 ]]; then
+  if launchctl print "gui/$(id -u)/za.ac.belgiumcampus.signzzz.quest-awake.$SERIAL" >/dev/null 2>&1; then
+    echo "Automatic Quest stay-awake is already managed by your Mac login helper."
+  else
+    "$PYTHON_BIN" "$PROJECT_ROOT/scripts/quest_keep_awake.py" --adb "$ADB_BIN" --serial "$SERIAL" &
+    awake_pid=$!
+  fi
+fi
 
 if command -v scrcpy >/dev/null 2>&1; then
   echo "Mirroring Quest 3 to this Mac. Close the mirror window to stop it."
-  exec scrcpy --serial "$SERIAL" --window-title "BCSignVR Quest 3 mirror" \
+  scrcpy --serial "$SERIAL" --window-title "signzzZ Quest 3 mirror" \
     --max-size 1600 --video-bit-rate 8M
+  exit $?
 fi
 
 if command -v ffplay >/dev/null 2>&1; then
   echo "scrcpy is not installed; using the built-in ADB video fallback."
   echo "For a smoother mirror, install scrcpy with: brew install scrcpy"
-  exec "$ADB_BIN" -s "$SERIAL" exec-out screenrecord --output-format=h264 --bit-rate 8000000 - \
+  "$ADB_BIN" -s "$SERIAL" exec-out screenrecord --output-format=h264 --bit-rate 8000000 - \
     | ffplay -fflags nobuffer -flags low_delay -framerate 60 -probesize 32 -sync video -
+  exit $?
 fi
 
-echo "The Quest app is running, but no Mac mirror tool was found." >&2
-echo "Install scrcpy with: brew install scrcpy" >&2
-exit 1
+echo "signzzZ is running. Install scrcpy for a Mac mirror."
+if [[ -n "$awake_pid" ]]; then
+  echo "Keep this terminal open for off-face testing; Ctrl+C restores normal sleep."
+  wait "$awake_pid"
+fi

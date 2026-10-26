@@ -107,6 +107,16 @@ To install the APK and mirror the headset view on the Mac, enable Quest Develope
 
 The USB connection is used for the Quest APK and mirror. The existing Mac build remains available for desktop play and Meta XR Simulator testing. A physical Quest 3 is still required for final optical-hand-tracking and performance validation.
 
+### Set the Quest down during testing
+
+The Mac Quest launcher keeps signzzZ awake off your face while its USB mirror session is open. It watches the app's resumed state and restores normal proximity-sensor sleep when you leave the app or close the mirror. It never reopens the app or prevents you using the Quest menu or power button. Set `QUEST_KEEP_AWAKE=0` to opt out.
+
+For an already-running app (also works on Windows with Python and ADB), run `python3 scripts/quest_keep_awake.py` and leave that terminal open. It waits through USB disconnections and headset reboots, then reapplies the override when signzzZ resumes. Ctrl+C restores normal sleep. If the cable disconnects before cleanup, reconnect and run `python3 scripts/quest_keep_awake.py --restore`, or restart the headset. Use `--serial DEVICE_SERIAL` if more than one Android device is connected.
+
+A per-user Mac login helper can run that same script with `--serial DEVICE_SERIAL --adb /absolute/path/to/adb` through launchd. Its label must be `za.ac.belgiumcampus.signzzz.quest-awake.DEVICE_SERIAL` so the mirror launcher does not start a competing helper. When installed, it stays available after the mirror closes and after Mac login; it still only changes sleep while signzzZ is resumed. Disable/remove that login helper before using `--restore` or `QUEST_KEEP_AWAKE=0` to opt out permanently.
+
+This is a USB **developer-testing** override, not a permanent app permission: [Meta controls off-face sleep through the headset proximity sensor](https://developers.meta.com/vr/documentation/unity/meta-xr-operator/quest/). The standalone app prevents ordinary idle dimming, but cannot silently override Horizon OS's off-face sleep on its own after a headset restart. Keeping the display active uses extra battery; restore normal sleep when finished.
+
 ## Run on Windows 11
 
 The Unity project includes a Windows 11 build menu and a Windows launcher for

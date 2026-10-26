@@ -59,6 +59,11 @@ namespace BCSignVR.Editor
         [MenuItem("BCSignVR/Build Windows 11 Demo")]
         public static void BuildWindows()
         {
+            // The macOS editor can retain an ARM64 architecture even with the
+            // StandaloneWindows64 target. Explicitly build for Intel/AMD PCs.
+            EditorUserBuildSettings.selectedStandaloneTarget = BuildTarget.StandaloneWindows64;
+            EditorUserBuildSettings.SetPlatformSettings(
+                BuildPipeline.GetBuildTargetName(BuildTarget.StandaloneWindows64), "Architecture", "x64");
             ConfigureOpenXR(BuildTargetGroup.Standalone);
             AssetDatabase.SaveAssets();
             System.IO.Directory.CreateDirectory("Builds/Windows");

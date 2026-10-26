@@ -65,12 +65,36 @@ namespace BCSignVR.Tests
                 var matched = false;
                 for (var frame = 0; frame < 7; frame++)
                     matched = recognizer.TryRecognize(hand, camera, out var label, out var confidence) &&
-                        label == "TEAM_SASL_" + expectedLabel && confidence >= .60f;
-                Assert.IsTrue(matched, $"A stable tracked {expectedLabel} handshape must pass the Quest model.");
+                        label == "TEAM_SASL_" + expectedLabel && confidence >= .68f;
+                Assert.IsTrue(matched, $"A stable tracked {expectedLabel} handshape must pass the Quest model at the stricter confidence threshold.");
 
                 hand.tracked = false;
                 Assert.IsFalse(recognizer.TryRecognize(hand, camera, out _, out _),
                     "The model must not report a match after hand tracking is lost.");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(cameraObject);
+            }
+        }
+
+        [Test]
+        public void OpenPracticePoseDoesNotFalseConfirmLetterB()
+        {
+            var cameraObject = new GameObject("Quest open-hand validation viewpoint");
+            try
+            {
+                var camera = cameraObject.AddComponent<Camera>();
+                camera.transform.SetPositionAndRotation(new Vector3(0, 1.85f, -2.6f), Quaternion.identity);
+                var recognizer = new SaslAlphabetPoseRecognizer();
+                var openHand = SimulatedHandPoseProvider.Template(SimulatedHandPoseProvider.DemoPose.Open);
+                var confirmed = false;
+                var label = "UNKNOWN";
+                var confidence = 0f;
+                for (var frame = 0; frame < 7; frame++)
+                    confirmed = recognizer.TryRecognize(openHand, camera, out label, out confidence);
+
+                Assert.IsFalse(confirmed, $"A spread open hand must not be confirmed as {label} ({confidence:P0}).");
             }
             finally
             {

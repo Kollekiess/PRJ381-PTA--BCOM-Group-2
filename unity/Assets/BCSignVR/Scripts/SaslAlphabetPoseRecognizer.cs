@@ -35,9 +35,12 @@ namespace BCSignVR
             22, 23, 24, 25
         };
 
-        const float MinimumProbability = .60f;
+        // The initial .60 threshold let a fully spread Open practice pose
+        // falsely confirm as B on Quest. Require a clearer frame-level signal
+        // as well as the existing stable-vote and runner-up margin checks.
+        const float MinimumProbability = .68f;
         const float MinimumMargin = .12f;
-        const float MinimumConfidence = .60f;
+        const float MinimumConfidence = .68f;
         const int HistoryLength = 7;
         const int StableVotesRequired = 4;
 

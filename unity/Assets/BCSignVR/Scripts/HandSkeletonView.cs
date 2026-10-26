@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -13,19 +14,19 @@ namespace BCSignVR
         sealed class FingerStroke
         {
             public int start;
+            public int jointCount;
             public int count;
             public LineRenderer outline;
             public LineRenderer fill;
             public float outlineZ;
             public float fillZ;
-            public float width;
         }
 
         readonly Transform root;
         readonly Vector3[] smoothedPoints = new Vector3[HandPoseFrame.JointCount];
         readonly Vector3[] displayPoints = new Vector3[HandPoseFrame.JointCount];
         readonly List<FingerStroke> fingers = new();
-        readonly LineRenderer[,] fingerCreases = new LineRenderer[4, 2];
+        readonly LineRenderer[,] fingerCreases = new LineRenderer[5, 2];
         readonly LineRenderer[] palmCreases = new LineRenderer[2];
         readonly Transform palmOutline;
         readonly Transform palmFill;
@@ -39,11 +40,17 @@ namespace BCSignVR
         readonly Material highlightMaterial;
         bool poseInitialized;
 
-        static readonly int[] FingerStarts = { 2, 6, 11, 16, 21 };
-        static readonly int[] FingerPointCounts = { 4, 5, 5, 5, 5 };
+        // XR metacarpals (6/11/16/21) are inside the palm, not the visible
+        // finger bases. All providers use the same 26-joint convention.
+        static readonly int[] FingerStarts = { 2, 7, 12, 17, 22 };
+        static readonly int[] FingerPointCounts = { 4, 4, 4, 4, 4 };
+        const int CurveSubdivisions = 4;
         // Broad, softly joined fingers read as Bob's illustrated hand on the
         // board instead of a thin landmark skeleton at headset distance.
-        static readonly float[] FingerWidths = { .132f, .112f, .118f, .104f, .092f };
+        // Width is relative to the hand's measured knuckle span. Fixed world
+        // widths made narrow prerecorded hands merge into a single blob.
+        static readonly float[] FingerWidthRatios = { .26f, .27f, .28f, .26f, .23f };
+        readonly float[] currentFingerWidths = new float[5];
 
         public HandSkeletonView(string name, Transform parent, Color color, bool solid = false)
         {
@@ -67,22 +74,24 @@ namespace BCSignVR
 
             for (var finger = 0; finger < FingerStarts.Length; finger++)
             {
-                var width = FingerWidths[finger];
+                var width = .11f;
+                var jointCount = FingerPointCounts[finger];
+                var curvePointCount = (jointCount - 1) * CurveSubdivisions + 1;
                 fingers.Add(new FingerStroke
                 {
                     start = FingerStarts[finger],
-                    count = FingerPointCounts[finger],
+                    jointCount = jointCount,
+                    count = curvePointCount,
                     outline = CreateStroke(name + " hand outline " + finger, outlineMaterial,
-                        width * 1.22f, width * .92f, FingerPointCounts[finger]),
+                        width * 1.22f, width * .92f, curvePointCount),
                     fill = CreateStroke(name + " hand fill " + finger, fillMaterial,
-                        width, width * .76f, FingerPointCounts[finger]),
+                        width, width * .76f, curvePointCount),
                     outlineZ = .022f,
-                    fillZ = .029f,
-                    width = width
+                    fillZ = .029f
                 });
             }
 
-            for (var finger = 0; finger < 4; finger++)
+            for (var finger = 0; finger < FingerStarts.Length; finger++)
             for (var crease = 0; crease < 2; crease++)
                 fingerCreases[finger, crease] = CreateStroke(name + " hand finger crease", creaseMaterial,
                     .009f, .007f, 3);
@@ -97,16 +106,15 @@ namespace BCSignVR
 
         public void SetPose(HandPoseFrame frame, Vector3 position, Quaternion rotation, float scale = 3f)
         {
-            SetPoseInternal(frame, position, rotation, scale, false);
+            SetPoseInternal(frame, position, rotation, scale);
         }
 
         public void SetLearnerPose(HandPoseFrame frame, Vector3 position, Quaternion rotation, float scale = 3f)
         {
-            SetPoseInternal(frame, position, rotation, scale, true);
+            SetPoseInternal(frame, position, rotation, scale);
         }
 
-        void SetPoseInternal(HandPoseFrame frame, Vector3 position, Quaternion rotation, float scale,
-            bool boardLocalRotation)
+        void SetPoseInternal(HandPoseFrame frame, Vector3 position, Quaternion rotation, float scale)
         {
             if (frame == null || !frame.tracked)
             {
@@ -116,17 +124,11 @@ namespace BCSignVR
             }
 
             root.gameObject.SetActive(true);
-            var camera = Camera.main;
-            if (camera != null)
-            {
-                var towardCamera = camera.transform.position - position;
-                root.position = towardCamera.sqrMagnitude > .0001f
-                    ? position + towardCamera.normalized * .035f
-                    : position;
-            }
-            else root.position = position;
-            if (boardLocalRotation) root.localRotation = rotation;
-            else root.rotation = rotation;
+            // Both cards belong to the board's plane, including after the
+            // classroom is anchored to the headset's starting direction.
+            root.position = position + (root.parent != null
+                ? root.parent.TransformVector(Vector3.back * .035f) : Vector3.back * .035f);
+            root.localRotation = rotation;
 
             BuildDisplayPoints(frame, displayPoints);
             var blend = poseInitialized
@@ -141,10 +143,13 @@ namespace BCSignVR
             }
 
             var wristPoint = smoothedPoints[0];
-            var indexBase = smoothedPoints[6];
-            var middleBase = smoothedPoints[11];
-            var ringBase = smoothedPoints[16];
-            var littleBase = smoothedPoints[21];
+            // Proximal joints are the knuckles for Quest, webcam and recordings.
+            // Source-dependent offsets made the same pose look different in
+            // Bob's card and the learner card, with a tiny palm on live hands.
+            var indexBase = smoothedPoints[7];
+            var middleBase = smoothedPoints[12];
+            var ringBase = smoothedPoints[17];
+            var littleBase = smoothedPoints[22];
             var knuckles = (indexBase + middleBase + ringBase + littleBase) * .25f;
             var up = knuckles - wristPoint;
             if (up.sqrMagnitude < .0001f) up = Vector3.up * .15f;
@@ -161,39 +166,60 @@ namespace BCSignVR
             SetDiscPair(palmOutline, palmFill, palmCenter, vertical,
                 palmWidth + .035f, palmHeight + .035f, .010f, .018f);
 
-            var wristCenter = wristPoint - vertical * .055f;
+            // Let the palm overlap the short wrist cuff. The old downward,
+            // detached oval read as a second blob at headset distance.
+            var wristCenter = wristPoint - vertical * .015f;
             SetDiscPair(wristOutline, wristFill, wristCenter, vertical,
-                fingerSpan * .82f + .10f, .17f, .011f, .019f);
+                fingerSpan * .82f + .10f, .20f, .003f, .009f);
 
             for (var index = 0; index < fingers.Count; index++)
             {
                 var stroke = fingers[index];
+                var width = Mathf.Clamp(fingerSpan * FingerWidthRatios[index], .025f, .14f);
+                currentFingerWidths[index] = width;
+                stroke.outline.startWidth = width * 1.22f;
+                stroke.outline.endWidth = width * .92f;
+                stroke.fill.startWidth = width;
+                stroke.fill.endWidth = width * .76f;
                 for (var point = 0; point < stroke.count; point++)
                 {
-                    var positionOnFinger = smoothedPoints[stroke.start + point];
+                    var segment = Mathf.Min(point / CurveSubdivisions, stroke.jointCount - 2);
+                    var amount = point == stroke.count - 1 ? 1f : point % CurveSubdivisions / (float)CurveSubdivisions;
+                    var p0 = smoothedPoints[stroke.start + Mathf.Max(0, segment - 1)];
+                    var p1 = smoothedPoints[stroke.start + segment];
+                    var p2 = smoothedPoints[stroke.start + segment + 1];
+                    var p3 = smoothedPoints[stroke.start + Mathf.Min(stroke.jointCount - 1, segment + 2)];
+                    var positionOnFinger = CatmullRom(p0, p1, p2, p3, amount);
                     stroke.outline.SetPosition(point, positionOnFinger + Vector3.forward * stroke.outlineZ);
                     stroke.fill.SetPosition(point, positionOnFinger + Vector3.forward * stroke.fillZ);
                 }
             }
 
-            for (var finger = 0; finger < 4; finger++)
+            for (var finger = 0; finger < FingerStarts.Length; finger++)
             for (var crease = 0; crease < 2; crease++)
             {
-                var start = FingerStarts[finger + 1];
-                var joint = start + (crease == 0 ? 2 : 3);
+                var start = FingerStarts[finger];
+                var joint = start + crease + 1;
                 var before = smoothedPoints[joint] - smoothedPoints[joint - 1];
                 var after = smoothedPoints[joint + 1] - smoothedPoints[joint];
                 var tangent = before + after;
                 if (tangent.sqrMagnitude < .0001f) tangent = before;
                 var across = new Vector3(-tangent.y, tangent.x, 0f).normalized;
-                var radius = strokeWidth(finger + 1) * .28f;
+                var radius = currentFingerWidths[finger] * .28f;
                 var center = smoothedPoints[joint] + Vector3.forward * .037f;
                 var creaseLine = fingerCreases[finger, crease];
+                creaseLine.startWidth = currentFingerWidths[finger] * .10f;
+                creaseLine.endWidth = currentFingerWidths[finger] * .075f;
                 creaseLine.SetPosition(0, center - across * radius);
                 creaseLine.SetPosition(1, center + across * (radius * .08f) + Vector3.up * .004f);
                 creaseLine.SetPosition(2, center + across * radius);
             }
 
+            foreach (var crease in palmCreases)
+            {
+                crease.startWidth = .010f;
+                crease.endWidth = .008f;
+            }
             SetPalmCrease(palmCreases[0], wristPoint, horizontal, vertical, fingerSpan, up.magnitude,
                 new Vector2(-.40f, .42f), new Vector2(-.04f, .50f), new Vector2(.34f, .35f), new Vector2(.43f, .27f));
             SetPalmCrease(palmCreases[1], wristPoint, horizontal, vertical, fingerSpan, up.magnitude,
@@ -208,7 +234,7 @@ namespace BCSignVR
                 var nail = nailHighlights[finger];
                 nail.localPosition = Vector3.Lerp(previous, tip, .80f) + Vector3.forward * .040f;
                 nail.localRotation = Quaternion.Euler(0, 0, Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg - 90f);
-                var width = strokeWidth(finger) * .58f;
+                var width = currentFingerWidths[finger] * .58f;
                 nail.localScale = new Vector3(width, width * .38f, 1f);
             }
 
@@ -220,7 +246,14 @@ namespace BCSignVR
             poseInitialized = true;
         }
 
-        static float strokeWidth(int finger) => FingerWidths[Mathf.Clamp(finger, 0, FingerWidths.Length - 1)];
+        static Vector3 CatmullRom(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, float amount)
+        {
+            var t2 = amount * amount;
+            var t3 = t2 * amount;
+            return .5f * ((2f * p1) + (-p0 + p2) * amount +
+                (2f * p0 - 5f * p1 + 4f * p2 - p3) * t2 +
+                (-p0 + 3f * p1 - 3f * p2 + p3) * t3);
+        }
 
         LineRenderer CreateStroke(string name, Material material, float startWidth, float endWidth, int pointCount)
         {
@@ -232,7 +265,10 @@ namespace BCSignVR
             line.startWidth = startWidth;
             line.endWidth = endWidth;
             line.widthMultiplier = 1f;
-            line.alignment = LineAlignment.View;
+            // TransformZ keeps the stroke in the board plane and scales its
+            // thickness with the palm. View-aligned strokes kept their world
+            // width when the Quest classroom shrank to 28% of desktop size.
+            line.alignment = LineAlignment.TransformZ;
             line.numCapVertices = 8;
             line.numCornerVertices = 8;
             line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
@@ -301,12 +337,12 @@ namespace BCSignVR
         static void BuildDisplayPoints(HandPoseFrame frame, Vector3[] output)
         {
             var wrist = frame.joints[0];
-            var knuckles = (frame.joints[6] + frame.joints[11] + frame.joints[16] + frame.joints[21]) * .25f;
+            var knuckles = (frame.joints[7] + frame.joints[12] + frame.joints[17] + frame.joints[22]) * .25f;
             var vertical = knuckles - wrist;
             if (vertical.sqrMagnitude < .0001f) vertical = Vector3.up;
             vertical.Normalize();
 
-            var horizontal = Vector3.ProjectOnPlane(frame.joints[21] - frame.joints[6], vertical);
+            var horizontal = Vector3.ProjectOnPlane(frame.joints[22] - frame.joints[7], vertical);
             if (horizontal.sqrMagnitude < .0001f) horizontal = Vector3.Cross(vertical, Vector3.forward);
             if (horizontal.sqrMagnitude < .0001f) horizontal = Vector3.right;
             horizontal.Normalize();
