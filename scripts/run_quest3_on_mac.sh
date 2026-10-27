@@ -6,6 +6,21 @@ APK="$PROJECT_ROOT/unity/Builds/Quest/BCSignVR-Quest3.apk"
 PACKAGE="za.ac.belgiumcampus.bcsignvr"
 ADB_BIN="${ADB_BIN:-$(command -v adb || true)}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
+PRESENTATION_MODE=0
+
+while (( $# > 0 )); do
+  case "$1" in
+    --presentation)
+      PRESENTATION_MODE=1
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      echo "Usage: $0 [--presentation]" >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
 
 if [[ ! -f "$APK" ]]; then
   echo "Quest APK not found. Run scripts/build_quest3_apk.sh first." >&2
@@ -58,17 +73,31 @@ if [[ "${QUEST_KEEP_AWAKE:-1}" == 1 ]]; then
 fi
 
 if command -v scrcpy >/dev/null 2>&1; then
-  echo "Mirroring Quest 3 to this Mac. Close the mirror window to stop it."
-  scrcpy --serial "$SERIAL" --window-title "signzzZ Quest 3 mirror" \
-    --max-size 1600 --video-bit-rate 8M
+  if (( PRESENTATION_MODE )); then
+    echo "Showing the Quest 3 view full-screen for the audience. Close the mirror window to stop it."
+    scrcpy --serial "$SERIAL" --window-title "signzzZ — live Quest view" \
+      --max-size 1600 --video-bit-rate 8M --crop 2064:2208:0:0 \
+      --fullscreen --no-control
+  else
+    echo "Mirroring Quest 3 to this Mac. Close the mirror window to stop it."
+    scrcpy --serial "$SERIAL" --window-title "signzzZ Quest 3 mirror" \
+      --max-size 1600 --video-bit-rate 8M --crop 2064:2208:0:0 --always-on-top
+  fi
   exit $?
 fi
 
 if command -v ffplay >/dev/null 2>&1; then
   echo "scrcpy is not installed; using the built-in ADB video fallback."
   echo "For a smoother mirror, install scrcpy with: brew install scrcpy"
+  # Quest's raw Android display is side-by-side stereo (left and right eyes).
+  # Crop to the left eye so the audience sees one normal classroom view.
+  ffplay_args=(-fflags nobuffer -flags low_delay -framerate 60 -probesize 32 -sync video \
+    -vf 'crop=iw/2:ih:0:0')
+  if (( PRESENTATION_MODE )); then
+    ffplay_args+=(-fs)
+  fi
   "$ADB_BIN" -s "$SERIAL" exec-out screenrecord --output-format=h264 --bit-rate 8000000 - \
-    | ffplay -fflags nobuffer -flags low_delay -framerate 60 -probesize 32 -sync video -
+    | ffplay "${ffplay_args[@]}" -
   exit $?
 fi
 

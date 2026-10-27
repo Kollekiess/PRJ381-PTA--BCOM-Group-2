@@ -105,6 +105,8 @@ Install Unity `6000.6.5f1` with **Android Build Support**, Android SDK/NDK and O
 
 To install the APK and mirror the headset view on the Mac, enable Quest Developer Mode and USB debugging, connect the Quest 3 by USB-C, accept the debugging prompt inside the headset, and run `./scripts/run_quest3_on_mac.sh`. The launcher installs and starts `signzzZ`, creates the USB-C TCP bridge, starts the Mac webcam tracker, and opens a live Mac window showing the Quest view. It uses `scrcpy` when available (`brew install scrcpy`); otherwise it falls back to ADB plus `ffplay`.
 
+For a presentation, double-click **Present Quest 3.command**. It uses the same setup, crops the stereo capture to one eye, opens the view full-screen, and disables Mac mouse control so the audience sees a clean live view of what the learner sees. Close the mirror window when the presentation is finished.
+
 The USB connection is also required for Quest Webcam mode: the launcher forwards the webcam bridge over TCP 5055 and the Webcam choice remains greyed out until that bridge is live. If the APK is launched manually without the launcher, VR hands still work but Webcam stays unavailable. The existing Mac build remains available for desktop play and Meta XR Simulator testing. A physical Quest 3 is still required for final optical-hand-tracking and performance validation.
 
 ### Set the Quest down during testing
