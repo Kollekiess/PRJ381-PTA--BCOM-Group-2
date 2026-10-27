@@ -31,6 +31,13 @@ The standalone app's imported model is only the PRJ team's A–Z landmark
 baseline, whose provenance and limitations are recorded in
 `ml/team_sasl/SOURCE.md`.
 
+The filled peach `CartoonHandA`–`CartoonHandZ` cards are presentation renders
+for Bob's visual style. Each was re-rendered against the corresponding NID
+SASL fingerspelling glyph so that the handshape, thumb contact and orientation
+are not invented by the UI. They are not a substitute for the NID source or a
+fluent SASL review; the app still presents alphabet practice as fingerspelling,
+not as a general word-sign translator.
+
 ## What is and is not trained today
 
 - A–Z: the imported team landmark model is runnable locally and is gated as a

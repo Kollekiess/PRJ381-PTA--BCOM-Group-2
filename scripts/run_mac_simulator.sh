@@ -4,7 +4,7 @@ set -euo pipefail
 PROJECT_ROOT="${0:A:h:h}"
 BACKEND_LOG="/tmp/bcsignvr-backend.log"
 RUNTIME_JSON="/Applications/MetaXRSimulator.app/Contents/Resources/MetaXRSimulator/meta_openxr_simulator.json"
-APP_BINARY="$PROJECT_ROOT/unity/Builds/macOS/BCSignVR.app/Contents/MacOS/BCSignVR Standalone"
+APP_BINARY="$PROJECT_ROOT/unity/Builds/macOS/BCSignVR.app/Contents/MacOS/signzzZ"
 OPENXR_LOADER_DIR="$PROJECT_ROOT/unity/Builds/macOS/BCSignVR.app/Contents/PlugIns/ARM64"
 WEBCAM_LOG="/tmp/bcsignvr-webcam.log"
 

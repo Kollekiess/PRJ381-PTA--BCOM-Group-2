@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PROJECT_ROOT="${0:A:h:h}"
-APP="$PROJECT_ROOT/unity/Builds/macOS/BCSignVR.app/Contents/MacOS/BCSignVR Standalone"
+APP="$PROJECT_ROOT/unity/Builds/macOS/BCSignVR.app/Contents/MacOS/signzzZ"
 if [[ ! -x "$APP" ]]; then
   print -u2 "Mac build not found: $APP"
   exit 1

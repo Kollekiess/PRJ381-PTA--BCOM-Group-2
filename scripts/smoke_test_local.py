@@ -13,7 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DB = ROOT / "backend" / "data" / "bcsignvr.sqlite3"
-APP = ROOT / "unity" / "Builds" / "macOS" / "BCSignVR.app" / "Contents" / "MacOS" / "BCSignVR Standalone"
+APP = ROOT / "unity" / "Builds" / "macOS" / "BCSignVR.app" / "Contents" / "MacOS" / "signzzZ"
 
 
 def check(name: str, condition: bool, detail: str) -> None:

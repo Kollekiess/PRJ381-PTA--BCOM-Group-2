@@ -57,7 +57,9 @@ namespace BCSignVR
         void Update()
         {
             if (hand == null || guide == null) return;
-            var phase = Mathf.Repeat((Time.time - startedAt) * (motion == Motion.Greeting ? .85f : .62f), 1f);
+            // Give learners time to read the handshape and the movement path.
+            // This is intentionally half the former playback rate.
+            var phase = Mathf.Repeat((Time.time - startedAt) * (motion == Motion.Greeting ? .425f : .31f), 1f);
             hand.localPosition = MotionPoint(phase) + Vector3.forward * -.018f;
             hand.localRotation = Quaternion.Euler(0, 0, MotionTilt(phase));
             hand.localScale = Vector3.one * (1f + Mathf.Sin(phase * Mathf.PI * 2f) * .018f);

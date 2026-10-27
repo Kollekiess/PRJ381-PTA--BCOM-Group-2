@@ -2,7 +2,15 @@
 
 ## Current implementation
 
-The local Python bridge uses pinned MediaPipe Hands to extract 21 landmarks from a Mac camera. It sends them to Unity on loopback UDP 5055 without uploading images. Unity maps these into 26 joints and draws the learner's hand next to the example.
+The local Python bridge uses pinned MediaPipe Hands to extract 21 landmarks from a Mac camera. Desktop builds receive the local packets over UDP 5055; Quest builds receive newline-delimited TCP on the same port through `adb reverse` over USB-C. No images are uploaded. Unity maps the landmarks into 26 joints and draws the learner's hand next to the example.
+
+The live path applies a light landmark smoother so one noisy camera frame does
+not make the learner hand jump. Static A–Z recognition keeps the exported dense
+model as its primary classifier and uses the reviewed template set only to rescue
+an uncertain result; strong dense predictions are not overwritten. Both histories
+reset when tracking is lost, and the Quest provider tolerates a very short joint
+dropout. The checked-in reference-template self-check now resolves all 26
+reference labels, but that is an engineering check, not a new accuracy claim.
 
 Warm-ups check finger bending and extension independently of hand size, position and rotation. Feedback identifies the finger furthest from the exercise target. These checks cover open hand, fist and pointing, not SASL vocabulary or nonmanual expression.
 

@@ -29,6 +29,7 @@ namespace BCSignVR
         TextMesh speech;
         float nextTipAt;
         string lastTip;
+        bool ready;
 
         public void Encourage() => encouragement = 2.5f;
 
@@ -58,7 +59,21 @@ namespace BCSignVR
             root.SetParent(parent, false);
             root.localPosition = position;
             var avatar = root.gameObject.AddComponent<TutorAvatar>();
-            avatar.Create();
+            try
+            {
+                avatar.Create();
+                avatar.ready = avatar.head != null && avatar.leftEye != null && avatar.rightEye != null &&
+                    avatar.leftArm != null && avatar.rightArm != null && avatar.leftBrow != null && avatar.rightBrow != null;
+                if (!avatar.ready)
+                    Debug.LogWarning("BCSignVR Bob avatar was only partially created; the classroom will continue without Bob animation.");
+            }
+            catch (System.Exception exception)
+            {
+                // Bob is a presentation extra. Never let an optional avatar/material
+                // issue prevent the lesson board from being created on a headset.
+                Debug.LogWarning($"BCSignVR Bob avatar was skipped: {exception.Message}");
+                avatar.ready = false;
+            }
             return root;
         }
 
@@ -183,26 +198,32 @@ namespace BCSignVR
             Quaternion rotation = default)
         {
             var item = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            if (item == null) return null;
             item.name = name;
             item.transform.SetParent(parent, false);
             item.transform.localPosition = position;
             item.transform.localScale = scale;
             item.transform.localRotation = rotation == default ? Quaternion.identity : rotation;
-            item.GetComponent<Renderer>().sharedMaterial = GetMaterial(color);
-            item.GetComponent<Collider>().enabled = false;
+            var renderer = item.GetComponent<Renderer>();
+            if (renderer != null) renderer.sharedMaterial = GetMaterial(color);
+            var collider = item.GetComponent<Collider>();
+            if (collider != null) collider.enabled = false;
             return item;
         }
 
         void Limb(string name, Transform parent, Vector3 start, Vector3 end, float width, Color color)
         {
             var item = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+            if (item == null) return;
             item.name = name;
             item.transform.SetParent(parent, false);
             item.transform.localPosition = (start + end) * .5f;
             item.transform.localRotation = Quaternion.FromToRotation(Vector3.up, end - start);
             item.transform.localScale = new Vector3(width, Vector3.Distance(start, end) * .5f, width);
-            item.GetComponent<Renderer>().sharedMaterial = GetMaterial(color);
-            item.GetComponent<Collider>().enabled = false;
+            var renderer = item.GetComponent<Renderer>();
+            if (renderer != null) renderer.sharedMaterial = GetMaterial(color);
+            var collider = item.GetComponent<Collider>();
+            if (collider != null) collider.enabled = false;
         }
 
         Material GetMaterial(Color color)
@@ -217,6 +238,10 @@ namespace BCSignVR
 
         void Update()
         {
+            if (!ready || head == null || leftEye == null || rightEye == null ||
+                leftArm == null || rightArm == null || leftBrow == null || rightBrow == null)
+                return;
+
             // Tiny gestures keep the guide alive without distracting from the signing lesson.
             var time = Time.time;
             encouragement = Mathf.Max(0, encouragement - Time.deltaTime);

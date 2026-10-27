@@ -1,4 +1,5 @@
 import unittest
+import base64
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -6,7 +7,8 @@ from unittest.mock import Mock, patch
 
 from hand_bridge import (AlphabetTemplateRecognizer, DenseAlphabetRecognizer, packet_for, read_camera_frame,
                          packet_hands, select_primary_hand, choose_recognition, SequenceRecognizer,
-                         discover_mac_camera_index)
+                         discover_mac_camera_index, hand_preview_png, LandmarkSmoother,
+                         choose_alphabet, np)
 
 
 def example_hand():
@@ -38,6 +40,18 @@ class PacketTests(unittest.TestCase):
         self.assertEqual(("TEAM_SASL_H", .88), choose_recognition(
             ("UNKNOWN", 0), ("TEAM_SASL_H", .88)))
 
+    def test_template_rescues_an_uncertain_dense_letter(self):
+        self.assertEqual(("TEAM_SASL_D", .91), choose_alphabet(
+            ("UNKNOWN", 0), ("TEAM_SASL_D", .91)))
+
+    def test_strong_dense_letter_is_not_overridden_by_template(self):
+        self.assertEqual(("TEAM_SASL_T", .96), choose_alphabet(
+            ("TEAM_SASL_T", .96), ("TEAM_SASL_G", .92)))
+
+    def test_agreeing_models_use_the_more_confident_result(self):
+        self.assertEqual(("TEAM_SASL_F", .94), choose_alphabet(
+            ("TEAM_SASL_F", .81), ("TEAM_SASL_F", .94)))
+
     def test_packet_has_media_pipe_joint_order(self):
         packet = packet_for(example_hand(), "Right", 1280, 720)
         self.assertEqual(21, len(packet["landmarks"]))
@@ -58,6 +72,14 @@ class PacketTests(unittest.TestCase):
         hand.landmark[0].x = float("nan")
         with self.assertRaises(ValueError):
             packet_for(hand, "Right", 1280, 720)
+
+    def test_hand_preview_is_a_transparent_png(self):
+        if np is None:
+            self.skipTest("numpy is not installed")
+        frame = np.full((90, 160, 3), (70, 120, 170), dtype=np.uint8)
+        preview = hand_preview_png(frame, example_hand())
+        self.assertTrue(preview)
+        self.assertEqual(base64.b64decode(preview)[:8], bytes([137, 80, 78, 71, 13, 10, 26, 10]))
 
     def test_primary_hand_prefers_right_hand(self):
         self.assertEqual(1, select_primary_hand([object(), object()], ["Left", "Right"]))
@@ -124,10 +146,45 @@ class RecognizerTests(unittest.TestCase):
         self.assertEqual(("UNKNOWN", 0.0), self.recognizer.update(self.hand))
         self.assertEqual(0, len(self.recognizer.frames))
 
+    def test_uncertain_frame_does_not_destroy_a_stable_letter_history(self):
+        recognizer = AlphabetTemplateRecognizer(None)
+        recognizer.templates = {"A": recognizer.features(self.hand)}
+        for _ in range(3):
+            self.assertEqual("TEAM_SASL_A", recognizer.update(self.hand)[0])
+        uncertain = SimpleNamespace(landmark=[SimpleNamespace(x=point.x, y=point.y, z=point.z)
+                                               for point in self.hand.landmark])
+        uncertain.landmark[-1].x += 2
+        self.assertEqual("UNKNOWN", recognizer.update(uncertain)[0])
+        self.assertEqual("TEAM_SASL_A", recognizer.update(self.hand)[0])
+
+    def test_alphabet_reset_forgets_previous_letter(self):
+        recognizer = AlphabetTemplateRecognizer(None)
+        recognizer.templates = {"A": recognizer.features(self.hand)}
+        recognizer.update(self.hand)
+        recognizer.reset()
+        self.assertEqual(0, len(recognizer.history))
+
     def test_malformed_model_sequence_is_not_a_match(self):
         self.recognizer.classes = [prototype("BAD", self.expected[:-1])]
         self.assertEqual(("UNKNOWN", 0.0), self.warm_up())
 
+
+class SmoothingTests(unittest.TestCase):
+    def test_smoother_reduces_single_frame_jitter(self):
+        smoother = LandmarkSmoother(alpha=.5)
+        first = smoother.update(example_hand())
+        jittered = SimpleNamespace(landmark=[SimpleNamespace(x=point.x + .2, y=point.y, z=point.z)
+                                              for point in first.landmark])
+        second = smoother.update(jittered)
+        self.assertAlmostEqual(first.landmark[10].x + .1, second.landmark[10].x)
+
+    def test_smoother_reset_does_not_carry_old_hand_pose(self):
+        smoother = LandmarkSmoother(alpha=.5)
+        smoother.update(example_hand())
+        smoother.reset()
+        shifted = SimpleNamespace(landmark=[SimpleNamespace(x=point.x + .2, y=point.y, z=point.z)
+                                             for point in example_hand().landmark])
+        self.assertAlmostEqual(shifted.landmark[10].x, smoother.update(shifted).landmark[10].x)
 
 class AlphabetTemplateTests(unittest.TestCase):
     def test_team_template_features_have_expected_shape(self):

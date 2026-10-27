@@ -96,14 +96,15 @@ namespace BCSignVR
         }
 
         public static BoardButton Button(string label, Transform parent, float x, float y, float width,
-            Action action, bool primary = false, float height = .45f)
+            Action action, bool primary = false, float height = .45f, bool disabled = false)
         {
             var root = Panel(label, parent, new Vector3(x, y, -.03f), new Vector2(width, height),
-                primary ? Blue : Color.white, .12f, true);
+                disabled ? new Color(.90f, .93f, .94f) : primary ? Blue : Color.white, .12f, true);
             var button = root.AddComponent<BoardButton>();
-            var text = Label(label, root.transform, 0, 0, .17f, primary ? Color.white : DeepBlue,
+            var text = Label(label, root.transform, 0, 0, .17f,
+                disabled ? Muted : primary ? Color.white : DeepBlue,
                 TextAnchor.MiddleCenter, width - .14f);
-            button.Initialize(action, primary, text);
+            button.Initialize(action, primary, text, disabled);
             var collider = root.AddComponent<BoxCollider>(); collider.size = new Vector3(width, height, .08f);
             return button;
         }
@@ -129,22 +130,28 @@ namespace BCSignVR
         Color normal;
         Renderer face;
         bool selected;
+        bool disabled;
         float lastPressedAt = -10f;
-        public void Initialize(Action callback, bool primary, TextMesh label)
+        public bool Interactable => !disabled;
+        public void Initialize(Action callback, bool primary, TextMesh label, bool isDisabled = false)
         {
-            action = callback; normal = primary ? ClassroomUi.Blue : Color.white;
+            disabled = isDisabled;
+            action = callback; normal = isDisabled ? new Color(.90f, .93f, .94f) : primary ? ClassroomUi.Blue : Color.white;
             face = transform.Find("Face").GetComponent<Renderer>();
+            if (face != null) face.material.color = normal;
+            if (label != null) label.color = (isDisabled ? ClassroomUi.Muted : primary ? Color.white : ClassroomUi.DeepBlue).linear;
         }
         public void Focus(bool value)
         {
             if (!this || !gameObject || !transform) return;
+            if (disabled) { selected = false; return; }
             selected = value;
             if (face != null) face.material.color = value ? Color.Lerp(normal, ClassroomUi.Blue, .22f) : normal;
             transform.localScale = value ? new Vector3(1.025f, 1.025f, 1) : Vector3.one;
         }
         public void Press()
         {
-            if (!isActiveAndEnabled || action == null || Time.unscaledTime - lastPressedAt < .12f) return;
+            if (disabled || !isActiveAndEnabled || action == null || Time.unscaledTime - lastPressedAt < .12f) return;
             lastPressedAt = Time.unscaledTime;
             action.Invoke();
         }
@@ -158,6 +165,7 @@ namespace BCSignVR
 
     public sealed class BoardPointer : MonoBehaviour
     {
+        const float GazeSelectSeconds = 5f;
         [StructLayout(LayoutKind.Sequential)]
         struct NativePoint { public double x, y; }
         [StructLayout(LayoutKind.Sequential)]
@@ -182,10 +190,11 @@ namespace BCSignVR
         BoardButton focused;
         BoardButton keyboardFocus;
         int selectedIndex = -1;
-        bool wasPressed;
         Vector3 guiMousePosition;
         bool hasGuiMousePosition;
-        readonly List<InputDevice> devices = new();
+        float gazeStartedAt = -1f;
+        GazeSelectionRing gazeRing;
+        void Awake() => gazeRing = new GazeSelectionRing();
         void Update()
         {
             var camera = GetComponent<Camera>();
@@ -202,48 +211,62 @@ namespace BCSignVR
             // first hit is interactive.
             var hits = Physics.RaycastAll(ray, 20f);
             Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+            var nextHit = default(RaycastHit);
             foreach (var hit in hits)
             {
-                next = hit.collider.GetComponentInParent<BoardButton>();
-                if (next) break;
+                var candidate = hit.collider.GetComponentInParent<BoardButton>();
+                if (candidate && candidate.Interactable) { next = candidate; nextHit = hit; break; }
             }
-            if (next != focused) { if (focused) focused.Focus(false); focused = next; if (focused) focused.Focus(true); }
+            if (next != focused)
+            {
+                if (focused) focused.Focus(false);
+                focused = next;
+                if (focused) focused.Focus(true);
+                gazeStartedAt = focused ? Time.unscaledTime : -1f;
+            }
             if (Input.GetKeyDown(KeyCode.Tab))
             {
-                var buttons = FindObjectsByType<BoardButton>(FindObjectsSortMode.InstanceID);
-                if (buttons.Length > 0)
+                var buttons = new List<BoardButton>();
+                foreach (var button in FindObjectsByType<BoardButton>(FindObjectsSortMode.InstanceID))
+                    if (button && button.Interactable) buttons.Add(button);
+                if (buttons.Count > 0)
                 {
-                    Array.Sort(buttons, (a, b) =>
+                    buttons.Sort((a, b) =>
                     {
                         var aPoint = camera.WorldToScreenPoint(a.transform.position);
                         var bPoint = camera.WorldToScreenPoint(b.transform.position);
                         var row = Mathf.Abs(aPoint.y - bPoint.y) > 24f ? bPoint.y.CompareTo(aPoint.y) : 0;
                         return row != 0 ? row : aPoint.x.CompareTo(bPoint.x);
                     });
-                    if (keyboardFocus) keyboardFocus.Focus(false); selectedIndex = (selectedIndex + 1) % buttons.Length;
+                    if (keyboardFocus) keyboardFocus.Focus(false); selectedIndex = (selectedIndex + 1) % buttons.Count;
                     keyboardFocus = buttons[selectedIndex]; if (keyboardFocus) keyboardFocus.Focus(true);
                 }
             }
-            var pressed = false;
             if (vr)
             {
-                devices.Clear(); InputDevices.GetDevicesWithCharacteristics(InputDeviceCharacteristics.Controller, devices);
-                foreach (var device in devices)
-                    if (device.TryGetFeatureValue(CommonUsages.triggerButton, out var trigger) && trigger) pressed = true;
-                var hand = UnityEngine.XR.Hands.OpenXR.HandTracking.subsystem;
-                if (hand != null && hand.running && hand.rightHand.isTracked &&
-                    hand.rightHand.GetJoint(UnityEngine.XR.Hands.XRHandJointID.ThumbTip).TryGetPose(out var thumb) &&
-                    hand.rightHand.GetJoint(UnityEngine.XR.Hands.XRHandJointID.IndexTip).TryGetPose(out var index))
-                    pressed |= Vector3.Distance(thumb.position, index.position) < .023f;
+                if (focused && gazeStartedAt >= 0)
+                {
+                    var progress = Mathf.Clamp01((Time.unscaledTime - gazeStartedAt) / GazeSelectSeconds);
+                    gazeRing.Show(nextHit.point, nextHit.normal, camera.transform.up, camera.transform.forward, progress);
+                    if (progress >= 1f)
+                    {
+                        focused.Press();
+                        gazeStartedAt = Time.unscaledTime;
+                    }
+                }
+                else gazeRing.Hide();
+            }
+            else
+            {
+                gazeStartedAt = -1f;
+                gazeRing.Hide();
             }
             if (Input.GetMouseButtonDown(0))
             {
                 var target = focused ?? ButtonAtScreenPoint(camera, mousePosition);
                 if (target) target.Press();
             }
-            if (pressed && !wasPressed && focused) focused.Press();
             if (Input.GetKeyDown(KeyCode.Return)) { var target = keyboardFocus ? keyboardFocus : focused; if (target) target.Press(); }
-            wasPressed = pressed;
         }
 
         // Some macOS window configurations deliver the native mouse event to
@@ -295,7 +318,7 @@ namespace BCSignVR
             var buttons = FindObjectsByType<BoardButton>(FindObjectsSortMode.None);
             foreach (var button in buttons)
             {
-                if (!button || !button.isActiveAndEnabled) continue;
+                if (!button || !button.isActiveAndEnabled || !button.Interactable) continue;
                 var collider = button.GetComponent<Collider>();
                 if (!collider) continue;
                 var bounds = collider.bounds;
@@ -306,6 +329,102 @@ namespace BCSignVR
                 if (rect.Contains(point)) return button;
             }
             return null;
+        }
+    }
+
+    sealed class GazeSelectionRing
+    {
+        readonly GameObject root;
+        readonly LineRenderer track;
+        readonly LineRenderer progress;
+        readonly Transform progressTip;
+        readonly Transform focusDot;
+        const int TrackPoints = 64;
+        const float Radius = .105f;
+
+        public GazeSelectionRing()
+        {
+            root = new GameObject("VR gaze countdown");
+            track = CreateLine("Gaze countdown track", new Color(.72f, .84f, .88f));
+            progress = CreateLine("Gaze countdown progress", ClassroomUi.Blue);
+            progressTip = CreateDot("Gaze countdown tip", ClassroomUi.Blue, .034f);
+            focusDot = CreateDot("Gaze countdown centre", new Color(.72f, .84f, .88f), .020f);
+            track.loop = true;
+            root.SetActive(false);
+        }
+
+        LineRenderer CreateLine(string name, Color color)
+        {
+            var line = new GameObject(name).AddComponent<LineRenderer>();
+            line.transform.SetParent(root.transform, false);
+            line.useWorldSpace = false;
+            // Keep the stroke in the ring's own XY plane. View alignment can
+            // billboard each segment independently on a tilted spatial board,
+            // which makes the countdown look like it has fallen flat.
+            line.alignment = LineAlignment.TransformZ;
+            line.textureMode = LineTextureMode.Stretch;
+            line.widthMultiplier = name.EndsWith("progress") ? .022f : .016f;
+            line.numCapVertices = 6;
+            line.numCornerVertices = 4;
+            line.sharedMaterial = ClassroomFactory.Material(color);
+            return line;
+        }
+
+        Transform CreateDot(string name, Color color, float diameter)
+        {
+            var dot = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            dot.name = name;
+            dot.transform.SetParent(root.transform, false);
+            dot.transform.localScale = Vector3.one * diameter;
+            dot.GetComponent<Renderer>().sharedMaterial = ClassroomFactory.Material(color);
+            UnityEngine.Object.Destroy(dot.GetComponent<Collider>());
+            return dot.transform;
+        }
+
+        public void Show(Vector3 position, Vector3 normal, Vector3 up, Vector3 cameraForward, float amount)
+        {
+            root.SetActive(true);
+            root.transform.position = position + normal * .014f;
+            // Face the learner instead of inheriting a potentially horizontal
+            // surface basis from a tilted spatial board. Project the headset's
+            // up vector onto the ring plane so the countdown stays upright and
+            // legible throughout the five-second gaze selection.
+            var faceNormal = -cameraForward;
+            if (faceNormal.sqrMagnitude < .0001f) faceNormal = normal;
+            faceNormal.Normalize();
+            var ringUp = Vector3.ProjectOnPlane(up, faceNormal);
+            if (ringUp.sqrMagnitude < .0001f)
+                ringUp = Vector3.ProjectOnPlane(Vector3.up, faceNormal);
+            if (ringUp.sqrMagnitude < .0001f)
+                ringUp = Vector3.Cross(faceNormal, Vector3.right);
+            root.transform.rotation = Quaternion.LookRotation(faceNormal, ringUp.normalized);
+            track.positionCount = TrackPoints;
+            for (var i = 0; i < TrackPoints; i++)
+                track.SetPosition(i, Point(i / (float)TrackPoints * Mathf.PI * 2f));
+
+            amount = Mathf.Clamp01(amount);
+            var points = Mathf.Max(2, Mathf.CeilToInt(TrackPoints * amount) + 1);
+            progress.positionCount = points;
+            progress.gameObject.SetActive(amount > 0f);
+            for (var i = 0; i < points; i++)
+            {
+                var angle = -Mathf.PI * .5f + Mathf.Clamp01(i / (float)(points - 1)) * Mathf.PI * 2f * amount;
+                progress.SetPosition(i, Point(angle));
+            }
+            var tipAngle = -Mathf.PI * .5f + Mathf.PI * 2f * amount;
+            progressTip.localPosition = Point(tipAngle);
+            progressTip.gameObject.SetActive(amount > 0f);
+            var pulse = 1f + Mathf.Sin(Time.unscaledTime * 5.5f) * .08f;
+            focusDot.localScale = Vector3.one * (.020f * pulse);
+            focusDot.gameObject.SetActive(true);
+        }
+
+        static Vector3 Point(float angle) => new(Mathf.Cos(angle) * Radius, Mathf.Sin(angle) * Radius, 0);
+        public void Hide()
+        {
+            root.SetActive(false);
+            progressTip.gameObject.SetActive(false);
+            focusDot.gameObject.SetActive(false);
         }
     }
 }

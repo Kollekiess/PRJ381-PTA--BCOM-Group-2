@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Track one hand with the Mac webcam and stream landmarks to Unity over localhost UDP."""
+"""Track one hand with the Mac webcam and stream landmarks to Unity locally."""
 from __future__ import annotations
 
 import argparse
@@ -13,6 +13,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import cv2
 import mediapipe as mp
@@ -104,6 +105,7 @@ class AlphabetTemplateRecognizer:
     """Conservative A-Z baseline using the team's reviewed templates."""
     MIN_DISTANCE = .32
     MIN_MARGIN = .045
+    CLOSE_TEMPLATE_DISTANCE = .05
 
     def __init__(self, model_path: Path | None):
         self.templates = {}
@@ -116,6 +118,10 @@ class AlphabetTemplateRecognizer:
                                   if isinstance(values, list) and len(values) == 63}
             except (OSError, ValueError, TypeError):
                 self.templates = {}
+
+    def reset(self):
+        """Forget a previous letter when the learner leaves the camera view."""
+        self.history.clear()
 
     @staticmethod
     def features(landmarks):
@@ -139,8 +145,9 @@ class AlphabetTemplateRecognizer:
             for label, template in self.templates.items())
         best_distance, best_label = ranked[0]
         second_distance = ranked[1][0] if len(ranked) > 1 else float("inf")
-        if best_distance > self.MIN_DISTANCE or second_distance - best_distance < self.MIN_MARGIN:
-            self.history.clear()
+        if (best_distance > self.MIN_DISTANCE or
+                (second_distance - best_distance < self.MIN_MARGIN and
+                 best_distance > self.CLOSE_TEMPLATE_DISTANCE)):
             return "UNKNOWN", 0.0
         self.history.append(best_label)
         stable_label = max(set(self.history), key=self.history.count)
@@ -171,6 +178,10 @@ class DenseAlphabetRecognizer:
         except (OSError, ValueError, KeyError, TypeError):
             self.weights = None
 
+    def reset(self):
+        """Forget a previous letter when tracking is lost."""
+        self.history.clear()
+
     def update(self, landmarks):
         if self.weights is None:
             return "MODEL_UNAVAILABLE", 0.0
@@ -190,7 +201,6 @@ class DenseAlphabetRecognizer:
         best, second = int(order[0]), int(order[1])
         confidence = float(probabilities[best])
         if confidence < self.MIN_CONFIDENCE or confidence - float(probabilities[second]) < self.MIN_MARGIN:
-            self.history.clear()
             return "UNKNOWN", 0.0
         self.history.append(self.labels[best])
         stable = max(set(self.history), key=self.history.count)
@@ -204,6 +214,34 @@ def landmark_values(landmarks):
     if len(points) != 21 or not all(math.isfinite(value) for point in points for value in point):
         raise ValueError("Expected 21 finite hand landmarks")
     return points
+
+
+class LandmarkSmoother:
+    """Reduce single-frame camera jitter without making hand movement feel laggy."""
+
+    def __init__(self, alpha: float = .65):
+        if not 0 < alpha <= 1:
+            raise ValueError("alpha must be between 0 and 1")
+        self.alpha = alpha
+        self.previous = None
+
+    def reset(self):
+        self.previous = None
+
+    def update(self, landmarks):
+        points = landmark_values(landmarks)
+        if self.previous is None:
+            smoothed = points
+        else:
+            smoothed = [
+                [self.alpha * current + (1 - self.alpha) * old
+                 for current, old in zip(point, previous)]
+                for point, previous in zip(points, self.previous)
+            ]
+        self.previous = smoothed
+        return SimpleNamespace(
+            landmark=[SimpleNamespace(x=point[0], y=point[1], z=point[2]) for point in smoothed]
+        )
 
 
 def valid_sequence(sequence, feature_count):
@@ -318,6 +356,93 @@ def choose_recognition(sequence_result, alphabet_result):
     return alphabet_result
 
 
+def choose_alphabet(dense_result, template_result):
+    """Use templates to rescue uncertain dense predictions without overriding strong ones."""
+    dense_label, dense_confidence = dense_result
+    template_label, template_confidence = template_result
+    template_available = template_label.startswith("TEAM_SASL_")
+    if not template_available:
+        return dense_result
+    if not dense_label.startswith("TEAM_SASL_"):
+        return template_result if template_confidence >= .55 else dense_result
+    if dense_label == template_label:
+        return dense_label, max(dense_confidence, template_confidence)
+    # The exported dense model is primary. A template can only rescue a
+    # lower-confidence disagreement, which helps reference shapes such as D,
+    # H and V while leaving strong learned predictions untouched.
+    if dense_confidence < .85 and template_confidence >= .55:
+        return template_result
+    return dense_result
+
+
+HAND_CONNECTIONS = (
+    (0, 1), (1, 2), (2, 3), (3, 4),
+    (0, 5), (5, 6), (6, 7), (7, 8),
+    (0, 9), (9, 10), (10, 11), (11, 12),
+    (0, 13), (13, 14), (14, 15), (15, 16),
+    (0, 17), (17, 18), (18, 19), (19, 20),
+)
+
+
+def hand_preview_png(frame, landmarks, width=240):
+    """Encode the camera-seen hand over transparency for the learner card.
+
+    MediaPipe gives reliable hand landmarks but not a pixel segmentation mask.
+    The low-resolution preview uses those landmarks as definite foreground
+    seeds, then lets GrabCut refine the real hand contour from the camera
+    pixels. The result is a small transparent PNG, not a replacement cartoon.
+    """
+    if frame is None or landmarks is None or np is None:
+        return ""
+    try:
+        points = np.asarray(landmark_values(landmarks), dtype=np.float32)
+        if frame.ndim != 3 or frame.shape[0] < 2 or frame.shape[1] < 2:
+            return ""
+        height, source_width = frame.shape[:2]
+        preview_height = max(2, round(height * width / source_width))
+        thumbnail = cv2.resize(frame, (width, preview_height), interpolation=cv2.INTER_AREA)
+        thumbnail = cv2.flip(thumbnail, 1)
+        points[:, 0] = 1.0 - points[:, 0]
+        points[:, 0] *= width - 1
+        points[:, 1] *= preview_height - 1
+        low = np.floor(points.min(axis=0)).astype(int)
+        high = np.ceil(points.max(axis=0)).astype(int)
+        span = max(int(high[0] - low[0]), int(high[1] - low[1]), 12)
+        padding = max(8, int(span * .24))
+        x0 = max(0, int(low[0]) - padding)
+        y0 = max(0, int(low[1]) - padding)
+        x1 = min(width - 1, int(high[0]) + padding)
+        y1 = min(preview_height - 1, int(high[1]) + padding)
+        rect = (x0, y0, max(1, x1 - x0), max(1, y1 - y0))
+
+        mask = np.full((preview_height, width), cv2.GC_BGD, dtype=np.uint8)
+        mask[y0:y1 + 1, x0:x1 + 1] = cv2.GC_PR_BGD
+        stroke = max(2, int(span * .075))
+        for start, end in HAND_CONNECTIONS:
+            a = tuple(np.round(points[start, :2]).astype(int))
+            b = tuple(np.round(points[end, :2]).astype(int))
+            cv2.line(mask, a, b, cv2.GC_FGD, stroke, cv2.LINE_AA)
+        palm = np.round(points[[0, 1, 5, 9, 13, 17], :2]).astype(np.int32)
+        cv2.fillConvexPoly(mask, palm, cv2.GC_FGD)
+        for point in points:
+            cv2.circle(mask, tuple(np.round(point[:2]).astype(int)), max(2, stroke // 2), cv2.GC_FGD, -1,
+                       cv2.LINE_AA)
+
+        background_model = np.zeros((1, 65), np.float64)
+        foreground_model = np.zeros((1, 65), np.float64)
+        cv2.grabCut(thumbnail, mask, rect, background_model, foreground_model, 2,
+                    cv2.GC_INIT_WITH_MASK)
+        alpha = np.where((mask == cv2.GC_FGD) | (mask == cv2.GC_PR_FGD), 255, 0).astype(np.uint8)
+        alpha = cv2.morphologyEx(alpha, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+        alpha = cv2.GaussianBlur(alpha, (0, 0), .7)
+        rgba = cv2.cvtColor(thumbnail, cv2.COLOR_BGR2BGRA)
+        rgba[:, :, 3] = alpha
+        encoded, buffer = cv2.imencode(".png", rgba, [int(cv2.IMWRITE_PNG_COMPRESSION), 3])
+        return base64.b64encode(buffer.tobytes()).decode("ascii") if encoded and len(buffer) <= 24000 else ""
+    except (ValueError, TypeError, cv2.error):
+        return ""
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--camera", default="mac",
@@ -325,6 +450,8 @@ def main() -> None:
     parser.add_argument("--video", type=Path, help="Use a video file instead of the live camera")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=5055)
+    parser.add_argument("--transport", choices=("udp", "tcp"), default="udp",
+                        help="Packet transport; use tcp for a Quest connected over USB-C")
     parser.add_argument("--no-preview", action="store_true")
     parser.add_argument("--record", type=Path, help="Optional raw landmark JSONL recording")
     parser.add_argument("--model", type=Path, default=Path(__file__).resolve().parents[1] /
@@ -361,35 +488,63 @@ def main() -> None:
         device.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
     configure_camera(camera)
-    sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    udp_sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) if args.transport == "udp" else None
+    tcp_listener = None
+    tcp_sender = None
+    if args.transport == "tcp":
+        tcp_listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        tcp_listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        tcp_listener.bind((args.host, args.port))
+        tcp_listener.listen(1)
+        tcp_listener.setblocking(False)
+
+    def send_packet(packet):
+        nonlocal tcp_sender
+        payload = json.dumps(packet, separators=(",", ":")).encode("utf-8")
+        if args.transport == "udp":
+            udp_sender.sendto(payload, (args.host, args.port))
+            return
+        if tcp_sender is None:
+            try:
+                tcp_sender, _ = tcp_listener.accept()
+                tcp_sender.settimeout(None)
+            except BlockingIOError:
+                return
+        try:
+            tcp_sender.sendall(payload + b"\n")
+        except OSError:
+            tcp_sender.close()
+            tcp_sender = None
     drawing = mp.solutions.drawing_utils
     hands_api = mp.solutions.hands
     recording = args.record.open("a", encoding="utf-8") if args.record else None
     preview_frame = 0
     recognizer = SequenceRecognizer(args.model)
-    alphabet_recognizer = DenseAlphabetRecognizer(args.alphabet_weights, args.alphabet_labels)
-    if alphabet_recognizer.weights is None:
-        alphabet_recognizer = AlphabetTemplateRecognizer(args.alphabet_model)
+    dense_alphabet_recognizer = DenseAlphabetRecognizer(args.alphabet_weights, args.alphabet_labels)
+    template_alphabet_recognizer = AlphabetTemplateRecognizer(args.alphabet_model)
+    dense_model_available = dense_alphabet_recognizer.weights is not None
+    alphabet_recognizer = dense_alphabet_recognizer if dense_model_available else template_alphabet_recognizer
+    landmark_smoother = LandmarkSmoother()
 
-    def preview_jpeg(frame):
-        """Return a small local-only preview that is safe for a UDP packet."""
+    def preview_jpeg(frame, landmarks=None):
+        """Return a small transparent local-only hand preview."""
         nonlocal preview_frame
-        if frame is None:
+        if frame is None or landmarks is None:
             return ""
         preview_frame += 1
         if preview_frame % 3 != 0:
             return ""
-        thumbnail = cv2.resize(frame, (160, 90), interpolation=cv2.INTER_AREA)
-        encoded, buffer = cv2.imencode(".jpg", thumbnail,
-                                       [int(cv2.IMWRITE_JPEG_QUALITY), 35])
-        return base64.b64encode(buffer.tobytes()).decode("ascii") if encoded and len(buffer) <= 6000 else ""
+        return hand_preview_png(frame, landmarks)
 
     def tracking_lost(frame=None):
         recognizer.reset()
+        dense_alphabet_recognizer.reset()
+        template_alphabet_recognizer.reset()
+        alphabet_recognizer.reset()
+        landmark_smoother.reset()
         packet = {"version": 1, "tracked": False, "recognized": "UNKNOWN", "confidence": 0,
                   "previewJpeg": preview_jpeg(frame)}
-        sender.sendto(json.dumps(packet, separators=(",", ":")).encode("utf-8"),
-                      (args.host, args.port))
+        send_packet(packet)
 
     try:
         with hands_api.Hands(
@@ -423,27 +578,35 @@ def main() -> None:
                 if result.multi_hand_landmarks:
                     labels = [item.classification[0].label for item in result.multi_handedness]
                     primary_index = select_primary_hand(result.multi_hand_landmarks, labels)
-                    landmarks = result.multi_hand_landmarks[primary_index]
+                    raw_landmarks = result.multi_hand_landmarks[primary_index]
+                    # MediaPipe is already fast and reliable, but a single noisy
+                    # landmark frame should not make the learner's hand flicker
+                    # between labels or make the live card jump.
+                    landmarks = landmark_smoother.update(raw_landmarks)
                     handedness = labels[primary_index]
                     recognized, confidence = recognizer.update(landmarks)
-                    alphabet_label, alphabet_confidence = alphabet_recognizer.update(landmarks)
+                    dense_result = dense_alphabet_recognizer.update(landmarks)
+                    template_result = template_alphabet_recognizer.update(landmarks)
+                    alphabet_result = (dense_result if dense_model_available else template_result)
+                    if dense_model_available:
+                        alphabet_result = choose_alphabet(dense_result, template_result)
                     recognized, confidence = choose_recognition(
-                        (recognized, confidence), (alphabet_label, alphabet_confidence))
+                        (recognized, confidence), alphabet_result)
                     packet = packet_for(landmarks, handedness, frame.shape[1], frame.shape[0],
                                         recognized, confidence)
                     # A small, local-only preview lets the learner see the real
                     # webcam movement in the board's second card. It is not
                     # written to recordings and stays on 127.0.0.1.
-                    packet["previewJpeg"] = preview_jpeg(frame)
+                    packet["previewJpeg"] = preview_jpeg(frame, landmarks)
                     # Keep legacy primary-hand fields for Unity, while retaining
                     # every detected hand in recordings for two-handed SASL signs.
                     packet["hands"] = packet_hands(result.multi_hand_landmarks, labels)
                     payload = json.dumps(packet, separators=(",", ":"))
-                    sender.sendto(payload.encode("utf-8"), (args.host, args.port))
+                    send_packet(packet)
                     if recording:
                         recording.write(payload + "\n")
                         recording.flush()
-                    drawing.draw_landmarks(frame, landmarks, hands_api.HAND_CONNECTIONS)
+                    drawing.draw_landmarks(frame, raw_landmarks, hands_api.HAND_CONNECTIONS)
                     cv2.putText(frame, f"{recognized.replace('_', ' ')}  {confidence:.0%}",
                                 (20, 76), cv2.FONT_HERSHEY_SIMPLEX, .65, (255, 255, 255), 2)
                 else:
@@ -460,7 +623,9 @@ def main() -> None:
             recording.close()
         camera.release()
         cv2.destroyAllWindows()
-        sender.close()
+        udp_sender and udp_sender.close()
+        tcp_sender and tcp_sender.close()
+        tcp_listener and tcp_listener.close()
 
 
 if __name__ == "__main__":

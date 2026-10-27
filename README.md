@@ -45,13 +45,13 @@ python3 -m unittest discover -s tests -v
 4. Press Play.
 5. Click the board controls, or use Tab and Enter. Choose your input on the welcome screen. Demo supports `1`, `2`, `3` and Space; Continue advances after completing an exercise.
 
-For the built app, double-click **Open Classroom.command**. It starts the local API and webcam bridge and stops the helper processes it owns when the classroom closes. Enable Camera access for Terminal if macOS requests it. See `docs/webcam-recognition-review.md` for current recognition limitations and the validation plan.
+For the built app, double-click **Open Classroom.command**. It starts the local API, webcam bridge and Meta XR Simulator. Enable Camera access for Terminal if macOS requests it. The **Webcam** choice stays greyed out until the OpenXR headset/simulator is actually connected; once unlocked, the right-hand board card shows the live tracked hand in Bob's style. You can switch between **Webcam** and **VR hands** without restarting the lesson. See `docs/webcam-recognition-review.md` for current recognition limitations and the validation plan.
 
 ## Enable the Mac webcam
 
 Run `./scripts/setup_webcam.sh` once. After that, `./scripts/run_mac_simulator.sh` starts the camera tracker automatically. Allow Camera access when macOS asks. The board status changes to `LIVE MAC CAMERA HAND` while a hand is visible; no camera frames are uploaded or saved unless recording is explicitly requested.
 
-The classroom launcher passes `--camera mac`, which prefers the built-in
+The simulator classroom launcher passes `--camera mac`, which prefers the built-in
 FaceTime/Mac camera when macOS also exposes an iPhone or Continuity Camera.
 To force a known device index manually, use `--camera 1` (or another index)
 when running the bridge directly. To diagnose the camera without opening
@@ -103,9 +103,9 @@ The installed Meta XR Simulator `201.0` supports keyboard/mouse simulated hands.
 
 Install Unity `6000.6.5f1` with **Android Build Support**, Android SDK/NDK and OpenJDK. Then run `./scripts/build_quest3_apk.sh` or open Unity and choose **BCSignVR → Build Quest 3 APK**.
 
-To install the APK and mirror the headset view on the Mac, enable Quest Developer Mode and USB debugging, connect the Quest 3 by USB-C, accept the debugging prompt inside the headset, and run `./scripts/run_quest3_on_mac.sh`. The launcher installs and starts BCSignVR, then opens a live Mac window showing the Quest view. It uses `scrcpy` when available (`brew install scrcpy`); otherwise it falls back to ADB plus `ffplay`.
+To install the APK and mirror the headset view on the Mac, enable Quest Developer Mode and USB debugging, connect the Quest 3 by USB-C, accept the debugging prompt inside the headset, and run `./scripts/run_quest3_on_mac.sh`. The launcher installs and starts `signzzZ`, creates the USB-C TCP bridge, starts the Mac webcam tracker, and opens a live Mac window showing the Quest view. It uses `scrcpy` when available (`brew install scrcpy`); otherwise it falls back to ADB plus `ffplay`.
 
-The USB connection is used for the Quest APK and mirror. The existing Mac build remains available for desktop play and Meta XR Simulator testing. A physical Quest 3 is still required for final optical-hand-tracking and performance validation.
+The USB connection is also required for Quest Webcam mode: the launcher forwards the webcam bridge over TCP 5055 and the Webcam choice remains greyed out until that bridge is live. If the APK is launched manually without the launcher, VR hands still work but Webcam stays unavailable. The existing Mac build remains available for desktop play and Meta XR Simulator testing. A physical Quest 3 is still required for final optical-hand-tracking and performance validation.
 
 ## Run on Windows 11
 

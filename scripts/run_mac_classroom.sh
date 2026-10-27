@@ -1,7 +1,7 @@
 #!/bin/zsh
 set -euo pipefail
 PROJECT_ROOT="${0:A:h:h}"
-APP_BINARY="$PROJECT_ROOT/unity/Builds/macOS/BCSignVR.app/Contents/MacOS/BCSignVR Standalone"
+APP_BINARY="$PROJECT_ROOT/unity/Builds/macOS/BCSignVR.app/Contents/MacOS/signzzZ"
 if [[ ! -x "$APP_BINARY" ]]; then
   print "The classroom needs a Mac build first. See README.md."
   exit 1

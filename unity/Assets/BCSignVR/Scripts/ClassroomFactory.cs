@@ -45,7 +45,16 @@ namespace BCSignVR
             podium.transform.localPosition = new Vector3(-3.8f, .06f, 4.20f);
             podium.transform.localScale = new Vector3(1.65f, .06f, 1.25f);
             podium.GetComponent<Renderer>().sharedMaterial = Material(new Color(.75f, .87f, .92f));
-            TutorAvatar.Build(root, new Vector3(-3.8f, .12f, 4.20f));
+            // Bob is an optional presentation layer. If a headset build has a
+            // platform-specific material problem, keep the lesson board usable.
+            try
+            {
+                TutorAvatar.Build(root, new Vector3(-3.8f, .12f, 4.20f));
+            }
+            catch (System.Exception exception)
+            {
+                Debug.LogException(exception);
+            }
             RenderSettings.ambientLight = new Color(.80f, .85f, .90f);
             var sun = new GameObject("Classroom soft light").AddComponent<Light>();
             sun.transform.SetParent(root, false); sun.type = LightType.Directional;

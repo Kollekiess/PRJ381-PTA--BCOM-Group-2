@@ -18,7 +18,7 @@ Meta XR Simulator / Quest 3    Mac webcam / MediaPipe    Desktop fallback
 
 Recognition runs locally in Unity so network latency cannot disrupt feedback. The backend never receives live hand geometry by default; it stores only lesson, accuracy, duration, mistake count, completion state, and timestamp.
 
-The `IHandPoseProvider` boundary deliberately separates tracking from teaching logic. OpenXR, the webcam UDP bridge, and the desktop simulator produce the same `HandPoseFrame`, so the lesson engine is testable without a headset. Webcam packets stay on `127.0.0.1:5055`.
+The `IHandPoseProvider` boundary deliberately separates tracking from teaching logic. OpenXR, the webcam bridge, and the desktop simulator produce the same `HandPoseFrame`, so the lesson engine is testable without a headset. Desktop webcam packets use UDP on `127.0.0.1:5055`; Quest uses newline-delimited TCP on the same port through `adb reverse` over USB-C.
 
 ## Content states
 

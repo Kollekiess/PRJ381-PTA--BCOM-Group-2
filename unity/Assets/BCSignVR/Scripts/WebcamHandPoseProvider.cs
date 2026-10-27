@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -23,10 +24,14 @@ namespace BCSignVR
         }
 
         readonly object sync = new();
-        readonly UdpClient client;
+        readonly int port;
+        readonly bool useTcp;
+        UdpClient udpClient;
         readonly Thread receiver;
+        TcpClient activeTcpClient;
         Packet latest;
         DateTime latestAt;
+        bool transportConnected;
         bool running = true;
 
         public string DisplayName => "Mac webcam hands";
@@ -42,13 +47,34 @@ namespace BCSignVR
             }
         }
 
+        // Quest reaches the Mac bridge through adb reverse, which forwards TCP.
+        // Desktop builds retain the existing UDP loopback path for the simulator.
+        public bool EndpointReady
+        {
+            get
+            {
+                lock (sync)
+                    return useTcp ? transportConnected : latest != null && (DateTime.UtcNow - latestAt).TotalSeconds <= 1.0;
+            }
+        }
+
         public WebcamHandPoseProvider(int port = 5055)
         {
+            this.port = port;
+            useTcp = Application.platform == RuntimePlatform.Android ||
+                Environment.GetEnvironmentVariable("BCSIGNVR_WEBCAM_TRANSPORT") == "tcp";
             try
             {
-                client = new UdpClient(new IPEndPoint(IPAddress.Loopback, port));
-                client.Client.ReceiveTimeout = 500;
-                receiver = new Thread(ReceiveLoop) { IsBackground = true, Name = "BCSignVR webcam receiver" };
+                if (!useTcp)
+                {
+                    udpClient = new UdpClient(new IPEndPoint(IPAddress.Loopback, port));
+                    udpClient.Client.ReceiveTimeout = 500;
+                    receiver = new Thread(ReceiveUdpLoop) { IsBackground = true, Name = "BCSignVR webcam UDP receiver" };
+                }
+                else
+                {
+                    receiver = new Thread(ReceiveTcpLoop) { IsBackground = true, Name = "BCSignVR webcam TCP receiver" };
+                }
                 receiver.Start();
             }
             catch (Exception error)
@@ -68,7 +94,9 @@ namespace BCSignVR
             // Keep the live camera card visible during tracking loss. A blank
             // card should mean the camera is unavailable, not simply that the
             // learner has moved their hand out of frame.
-            if (packet != null && !string.IsNullOrEmpty(packet.previewJpeg))
+            if (packet != null && !packet.tracked)
+                PreviewJpeg = "";
+            else if (packet != null && !string.IsNullOrEmpty(packet.previewJpeg))
                 PreviewJpeg = packet.previewJpeg;
             if (packet == null || packet.version != 1 || !packet.tracked || packet.landmarks == null || packet.landmarks.Length != 21 ||
                 (DateTime.UtcNow - received).TotalSeconds > .45)
@@ -79,7 +107,6 @@ namespace BCSignVR
             DetectedHand = string.IsNullOrWhiteSpace(packet.handedness) ? "Right" : packet.handedness;
             RecognizedLabel = string.IsNullOrEmpty(packet.recognized) ? "UNKNOWN" : packet.recognized;
             RecognitionConfidence = Finite(packet.confidence) ? Mathf.Clamp01(packet.confidence) : 0;
-            if (!string.IsNullOrEmpty(packet.previewJpeg)) PreviewJpeg = packet.previewJpeg;
             destination.tracked = true;
             destination.source = DisplayName;
             return true;
@@ -114,27 +141,75 @@ namespace BCSignVR
             for (var i = 0; i < 4; i++) frame.joints[targetStart + 1 + i] = point(sourceStart + i);
         }
 
-        void ReceiveLoop()
+        void StorePacket(string payload)
+        {
+            try
+            {
+                var packet = JsonUtility.FromJson<Packet>(payload);
+                if (packet == null) return;
+                lock (sync) { latest = packet; latestAt = DateTime.UtcNow; }
+            }
+            catch (Exception error) { Debug.LogWarning($"Bad webcam landmark packet: {error.Message}"); }
+        }
+
+        void ReceiveUdpLoop()
         {
             var endpoint = new IPEndPoint(IPAddress.Loopback, 0);
-            while (running && client != null)
+            while (running && udpClient != null)
             {
                 try
                 {
-                    var bytes = client.Receive(ref endpoint);
-                    var packet = JsonUtility.FromJson<Packet>(Encoding.UTF8.GetString(bytes));
-                    lock (sync) { latest = packet; latestAt = DateTime.UtcNow; }
+                    var bytes = udpClient.Receive(ref endpoint);
+                    StorePacket(Encoding.UTF8.GetString(bytes));
                 }
                 catch (SocketException) { }
                 catch (ObjectDisposedException) { break; }
-                catch (Exception error) { Debug.LogWarning($"Bad webcam landmark packet: {error.Message}"); }
+            }
+        }
+
+        void ReceiveTcpLoop()
+        {
+            while (running)
+            {
+                TcpClient connection = null;
+                try
+                {
+                    connection = new TcpClient { NoDelay = true };
+                    connection.Connect(IPAddress.Loopback, port);
+                    lock (sync)
+                    {
+                        activeTcpClient = connection;
+                        transportConnected = true;
+                    }
+                    using var reader = new StreamReader(connection.GetStream(), Encoding.UTF8);
+                    while (running)
+                    {
+                        var line = reader.ReadLine();
+                        if (line == null) break;
+                        StorePacket(line);
+                    }
+                }
+                catch (SocketException) { }
+                catch (IOException) { }
+                catch (ObjectDisposedException) { break; }
+                finally
+                {
+                    lock (sync)
+                    {
+                        transportConnected = false;
+                        if (ReferenceEquals(activeTcpClient, connection)) activeTcpClient = null;
+                    }
+                    connection?.Close();
+                }
+                if (running) Thread.Sleep(250);
             }
         }
 
         public void Dispose()
         {
             running = false;
-            client?.Close();
+            udpClient?.Close();
+            lock (sync) { activeTcpClient?.Close(); }
             receiver?.Join(700);
         }
     }

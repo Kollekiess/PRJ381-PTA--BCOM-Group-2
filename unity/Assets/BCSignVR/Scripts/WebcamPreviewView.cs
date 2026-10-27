@@ -19,8 +19,9 @@ namespace BCSignVR
             quad.transform.localPosition = center;
             quad.transform.localScale = new Vector3(size.x, size.y, 1);
             UnityEngine.Object.Destroy(quad.GetComponent<Collider>());
-            texture = new Texture2D(2, 2, TextureFormat.RGB24, false);
+            texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
             texture.name = name + " texture";
+            texture.wrapMode = TextureWrapMode.Clamp;
             var shader = Resources.Load<Shader>("BCSignVRUnlitTexture");
             renderer = quad.GetComponent<Renderer>();
             renderer.sharedMaterial = new Material(shader) { mainTexture = texture };
