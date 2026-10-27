@@ -24,25 +24,47 @@ namespace BCSignVR.Tests
         }
 
         [Test]
-        public void FirstRunCreatesDefaultProfileAndPersistsAddedLearner()
+        public void FirstRunCreatesOneUsableDefaultProfileAndPersistsIt()
         {
-            var first = new LearnerProfileStore(path);
-            Assert.AreEqual(1, first.Profiles.Count);
-            Assert.AreEqual(LearnerProfileStore.DefaultProfileId, first.Profiles[0].id);
-
-            var added = first.Add("Presentation learner");
-            var restored = new LearnerProfileStore(path).Profiles;
-            Assert.AreEqual(2, restored.Count);
-            Assert.IsTrue(restored.Any(profile => profile.id == added.id && profile.displayName == "Presentation learner"));
+            var store = new LearnerProfileStore(path);
+            Assert.AreEqual(1, store.Profiles.Count);
+            Assert.AreEqual(LearnerProfileStore.DefaultProfileId, store.Profiles[0].id);
+            Assert.AreEqual("Local Learner", new LearnerProfileStore(path).Profiles.Single().displayName);
         }
 
         [Test]
-        public void InvalidProfileNamesAreRejected()
+        public void AddedProfilesSurviveReloadAndMayShareDisplayNames()
         {
             var store = new LearnerProfileStore(path);
-            Assert.Throws<ArgumentException>(() => store.Add("   "));
+            var first = store.Add("Asha");
+            var second = store.Add("Asha");
+            var restored = new LearnerProfileStore(path).Profiles;
+
+            Assert.AreEqual(3, restored.Count);
+            Assert.AreNotEqual(first.id, second.id);
+            Assert.AreEqual("Asha", restored[1].displayName);
+            Assert.AreEqual("Asha", restored[2].displayName);
+        }
+
+        [Test]
+        public void InvalidNamesAreRejectedWithoutChangingSavedProfiles()
+        {
+            var store = new LearnerProfileStore(path);
+            Assert.Throws<ArgumentException>(() => store.Add("  "));
             Assert.Throws<ArgumentException>(() => store.Add(new string('x', 29)));
+            Assert.AreEqual(1, new LearnerProfileStore(path).Profiles.Count);
+        }
+
+        [Test]
+        public void CorruptProfileFileIsPreservedBeforeRecovery()
+        {
+            Directory.CreateDirectory(directory);
+            const string brokenJson = "{interrupted profile write";
+            File.WriteAllText(path, brokenJson);
+            var store = new LearnerProfileStore(path);
             Assert.AreEqual(1, store.Profiles.Count);
+            Assert.AreEqual(brokenJson, File.ReadAllText(store.RecoveryCopyPath));
+            Assert.AreEqual(1, new LearnerProfileStore(path).Profiles.Count);
         }
     }
 }

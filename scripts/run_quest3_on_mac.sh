@@ -5,6 +5,7 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APK="$PROJECT_ROOT/unity/Builds/Quest/BCSignVR-Quest3.apk"
 PACKAGE="za.ac.belgiumcampus.bcsignvr"
 ADB_BIN="${ADB_BIN:-$(command -v adb || true)}"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 if [[ ! -f "$APK" ]]; then
   echo "Quest APK not found. Run scripts/build_quest3_apk.sh first." >&2
@@ -16,42 +17,45 @@ if [[ -z "$ADB_BIN" ]]; then
 fi
 
 device_list="$("$ADB_BIN" devices | awk '$2 == "device" { print $1 }')"
+if [[ -z "$device_list" ]]; then
+  echo "No authorized Quest found. Connect USB and accept USB debugging in the headset." >&2
+  exit 1
+fi
 DEVICES=("${(@f)device_list}")
 if (( ${#DEVICES[@]} == 0 )); then
   echo "No Quest 3 found. Connect it by USB, enable Developer Mode, and accept USB debugging in the headset." >&2
   exit 1
 fi
 if (( ${#DEVICES[@]} > 1 )); then
-  echo "Multiple Android devices found; using ${DEVICES[1]}. Set ANDROID_SERIAL to choose another." >&2
+  if [[ -z "${ANDROID_SERIAL:-}" ]]; then
+    echo "Multiple Android devices found. Set ANDROID_SERIAL to your Quest serial." >&2
+    exit 1
+  fi
 fi
 SERIAL="${ANDROID_SERIAL:-${DEVICES[1]}}"
 
-camera_pid=""
+awake_pid=""
 cleanup() {
-  [[ -z "$camera_pid" ]] || kill "$camera_pid" 2>/dev/null || true
+  if [[ -n "$awake_pid" ]]; then
+    kill "$awake_pid" 2>/dev/null || true
+    wait "$awake_pid" 2>/dev/null || true
+  fi
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 echo "Installing signzzZ on Quest 3 ($SERIAL)..."
-"$ADB_BIN" -s "$SERIAL" reverse tcp:5055 tcp:5055 >/dev/null
 "$ADB_BIN" -s "$SERIAL" install -r "$APK" >/dev/null
-if [[ -x "$PROJECT_ROOT/.venv/bin/python" ]]; then
-  (
-    while true; do
-      if "$PROJECT_ROOT/.venv/bin/python" "$PROJECT_ROOT/webcam/hand_bridge.py" \
-          --camera mac --no-preview --transport tcp >>/tmp/bcsignvr-webcam-quest.log 2>&1; then
-        break
-      else
-        print "Quest webcam tracker stopped; retrying in 2 seconds." >>/tmp/bcsignvr-webcam-quest.log
-        sleep 2
-      fi
-    done
-  ) &
-  camera_pid=$!
-else
-  echo "Webcam runtime not found; VR hands will still work, but Webcam stays unavailable." >&2
-fi
 "$ADB_BIN" -s "$SERIAL" shell monkey -p "$PACKAGE" 1 >/dev/null
+if [[ "${QUEST_KEEP_AWAKE:-1}" == 1 ]]; then
+  if launchctl print "gui/$(id -u)/za.ac.belgiumcampus.signzzz.quest-awake.$SERIAL" >/dev/null 2>&1; then
+    echo "Automatic Quest stay-awake is already managed by your Mac login helper."
+  else
+    "$PYTHON_BIN" "$PROJECT_ROOT/scripts/quest_keep_awake.py" --adb "$ADB_BIN" --serial "$SERIAL" &
+    awake_pid=$!
+  fi
+fi
 
 if command -v scrcpy >/dev/null 2>&1; then
   echo "Mirroring Quest 3 to this Mac. Close the mirror window to stop it."
@@ -68,11 +72,8 @@ if command -v ffplay >/dev/null 2>&1; then
   exit $?
 fi
 
-echo "The Quest app is running, but no Mac mirror tool was found." >&2
-echo "Install scrcpy with: brew install scrcpy" >&2
-echo "Keeping the USB webcam bridge alive. Press Ctrl-C to stop signzzZ." >&2
-if [[ -n "$camera_pid" ]]; then
-  wait "$camera_pid"
-else
-  while true; do sleep 60; done
+echo "signzzZ is running. Install scrcpy for a Mac mirror."
+if [[ -n "$awake_pid" ]]; then
+  echo "Keep this terminal open for off-face testing; Ctrl+C restores normal sleep."
+  wait "$awake_pid"
 fi

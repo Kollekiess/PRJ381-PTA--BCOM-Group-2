@@ -64,6 +64,15 @@ namespace BCSignVR.Tests
         }
 
         [Test]
+        public void CoachCallsOutThumbWhenOpenHandThumbIsTucked()
+        {
+            var open = SimulatedHandPoseProvider.Template(SimulatedHandPoseProvider.DemoPose.Open);
+            var fist = SimulatedHandPoseProvider.Template(SimulatedHandPoseProvider.DemoPose.Fist);
+            for (var joint = 2; joint <= 5; joint++) open.joints[joint] = fist.joints[joint];
+            StringAssert.Contains("thumb", HandPoseCoach.Hint(open, SimulatedHandPoseProvider.DemoPose.Open).ToLowerInvariant());
+        }
+
+        [Test]
         public void TrackingLossAndInvalidGeometryNeverMatch()
         {
             Assert.Zero(HandPoseCoach.Match(null, SimulatedHandPoseProvider.DemoPose.Open));

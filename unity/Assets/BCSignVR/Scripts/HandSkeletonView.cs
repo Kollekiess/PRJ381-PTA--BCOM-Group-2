@@ -1,248 +1,360 @@
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace BCSignVR
 {
     /// <summary>
-    /// Presents webcam/VR landmarks as a friendly Bob-style hand. The source
-    /// remains the real landmark stream; this layer only changes presentation
-    /// so the learner never sees a blue/green debugging skeleton.
+    /// Draws tracked joints as a flat, friendly Bob-style hand. The view stays
+    /// driven by the real landmarks, but uses outlined rounded fingers, a soft
+    /// palm, small highlights and crease strokes instead of debug beads.
     /// </summary>
     public sealed class HandSkeletonView
     {
-        static readonly int[,] Bones =
+        sealed class FingerStroke
         {
-            {0,1},{0,2},{2,3},{3,4},{4,5},
-            {1,6},{6,7},{7,8},{8,9},{9,10},
-            {1,11},{11,12},{12,13},{13,14},{14,15},
-            {1,16},{16,17},{17,18},{18,19},{19,20},
-            {1,21},{21,22},{22,23},{23,24},{24,25}
-        };
+            public int start;
+            public int jointCount;
+            public int count;
+            public LineRenderer outline;
+            public LineRenderer fill;
+            public float outlineZ;
+            public float fillZ;
+        }
 
         readonly Transform root;
-        readonly Transform[] joints = new Transform[HandPoseFrame.JointCount];
-        readonly Transform[] jointOutlines = new Transform[HandPoseFrame.JointCount];
-        readonly Transform[] bones = new Transform[Bones.GetLength(0)];
-        readonly Transform[] boneOutlines = new Transform[Bones.GetLength(0)];
+        readonly Vector3[] smoothedPoints = new Vector3[HandPoseFrame.JointCount];
+        readonly Vector3[] displayPoints = new Vector3[HandPoseFrame.JointCount];
+        readonly List<FingerStroke> fingers = new();
+        readonly LineRenderer[,] fingerCreases = new LineRenderer[5, 2];
+        readonly LineRenderer[] palmCreases = new LineRenderer[2];
+        readonly Transform palmOutline;
+        readonly Transform palmFill;
+        readonly Transform wristOutline;
+        readonly Transform wristFill;
+        readonly Transform palmHighlight;
+        readonly Transform[] nailHighlights = new Transform[5];
         readonly Material outlineMaterial;
         readonly Material fillMaterial;
-        readonly Material jointMaterial;
+        readonly Material creaseMaterial;
         readonly Material highlightMaterial;
-        readonly Material[] fingerMaterials = new Material[5];
-        readonly Transform palm;
-        readonly Transform palmOutline;
-        readonly Transform wrist;
-        readonly Transform wristOutline;
-        readonly Transform highlight;
-        readonly Transform[] fingertipHighlights = new Transform[5];
-        Vector3 trackingAnchor;
-        bool hasTrackingAnchor;
+        bool poseInitialized;
+
+        // XR metacarpals (6/11/16/21) are inside the palm, not the visible
+        // finger bases. All providers use the same 26-joint convention.
+        static readonly int[] FingerStarts = { 2, 7, 12, 17, 22 };
+        static readonly int[] FingerPointCounts = { 4, 4, 4, 4, 4 };
+        const int CurveSubdivisions = 4;
+        // Broad, softly joined fingers read as Bob's illustrated hand on the
+        // board instead of a thin landmark skeleton at headset distance.
+        // Width is relative to the hand's measured knuckle span. Fixed world
+        // widths made narrow prerecorded hands merge into a single blob.
+        static readonly float[] FingerWidthRatios = { .26f, .27f, .28f, .26f, .23f };
+        readonly float[] currentFingerWidths = new float[5];
 
         public HandSkeletonView(string name, Transform parent, Color color, bool solid = false)
         {
             root = new GameObject(name).transform;
             root.SetParent(parent, false);
-            // Keep the light-grey Bob-style hand readable: articulated capsules,
-            // dark definitions and small highlights. The landmarks stay as
-            // hidden anchors, while the whole renderer follows the real hand's
-            // wrist angle and movement inside the learner card.
-            var grey = Mathf.Clamp01((color.r + color.g + color.b) / 3f);
-            outlineMaterial = ClassroomFactory.Material(new Color(grey * .34f, grey * .34f, grey * .34f));
-            fillMaterial = ClassroomFactory.Material(new Color(grey, grey, grey));
-            jointMaterial = ClassroomFactory.Material(new Color(grey * .76f, grey * .76f, grey * .76f));
-            highlightMaterial = ClassroomFactory.Material(new Color(
-                Mathf.Min(1f, grey + .13f), Mathf.Min(1f, grey + .13f), Mathf.Min(1f, grey + .13f)));
-            for (var i = 0; i < fingerMaterials.Length; i++)
+            root.gameObject.SetActive(false);
+
+            // Bob's source art uses a warm peach fill, a soft umber contour,
+            // and restrained crease/highlight accents. Keeping these surfaces
+            // flat and front-facing avoids the old lumpy 3-D capsule look.
+            outlineMaterial = ClassroomFactory.Material(new Color(.35f, .12f, .055f));
+            fillMaterial = ClassroomFactory.Material(color);
+            creaseMaterial = ClassroomFactory.Material(new Color(.68f, .32f, .20f));
+            highlightMaterial = ClassroomFactory.Material(new Color(.99f, .82f, .67f));
+
+            palmOutline = CreateDisc("Bob hand palm contour", outlineMaterial);
+            palmFill = CreateDisc("Bob hand palm", fillMaterial);
+            wristOutline = CreateDisc("Bob hand wrist contour", outlineMaterial);
+            wristFill = CreateDisc("Bob hand wrist", fillMaterial);
+            palmHighlight = CreateDisc("Bob hand palm highlight", highlightMaterial);
+
+            for (var finger = 0; finger < FingerStarts.Length; finger++)
             {
-                var shade = 1f + (i - 2) * .035f;
-                fingerMaterials[i] = ClassroomFactory.Material(new Color(
-                    Mathf.Clamp01(grey * shade), Mathf.Clamp01(grey * shade), Mathf.Clamp01(grey * shade)));
+                var width = .11f;
+                var jointCount = FingerPointCounts[finger];
+                var curvePointCount = (jointCount - 1) * CurveSubdivisions + 1;
+                fingers.Add(new FingerStroke
+                {
+                    start = FingerStarts[finger],
+                    jointCount = jointCount,
+                    count = curvePointCount,
+                    outline = CreateStroke(name + " hand outline " + finger, outlineMaterial,
+                        width * 1.22f, width * .92f, curvePointCount),
+                    fill = CreateStroke(name + " hand fill " + finger, fillMaterial,
+                        width, width * .76f, curvePointCount),
+                    outlineZ = .022f,
+                    fillZ = .029f
+                });
             }
 
-            for (var i = 0; i < joints.Length; i++)
-            {
-                jointOutlines[i] = Ball($"Bob hand outline joint {i}", outlineMaterial);
-                joints[i] = Ball($"Bob hand joint {i}", jointMaterial);
-                // Keep small wooden knuckles visible. They make each tracked
-                // finger legible without returning to the old blue/grey debug
-                // skeleton or hiding the pose inside one dark contour.
-                jointOutlines[i].gameObject.SetActive(true);
-                joints[i].gameObject.SetActive(true);
-            }
-            for (var i = 0; i < bones.Length; i++)
-            {
-                boneOutlines[i] = Capsule($"Bob hand outline finger {i}", outlineMaterial);
-                bones[i] = Capsule($"Bob hand finger {i}", fingerMaterials[Mathf.Min(4, i / 5)]);
-                boneOutlines[i].gameObject.SetActive(true);
-            }
+            for (var finger = 0; finger < FingerStarts.Length; finger++)
+            for (var crease = 0; crease < 2; crease++)
+                fingerCreases[finger, crease] = CreateStroke(name + " hand finger crease", creaseMaterial,
+                    .009f, .007f, 3);
 
-            for (var i = 0; i < fingertipHighlights.Length; i++)
-                fingertipHighlights[i] = Ball($"Bob hand fingertip highlight {i}", highlightMaterial);
+            for (var crease = 0; crease < palmCreases.Length; crease++)
+                palmCreases[crease] = CreateStroke(name + " hand palm crease", creaseMaterial,
+                    .010f, .008f, 4);
 
-            palmOutline = Ball("Bob hand outline palm", outlineMaterial);
-            palm = Ball("Bob hand palm", fillMaterial);
-            wristOutline = Ball("Bob hand outline wrist", outlineMaterial);
-            wrist = Ball("Bob hand wrist", fillMaterial);
-            highlight = Ball("Bob hand soft highlight", highlightMaterial);
-            palmOutline.gameObject.SetActive(true);
-            wristOutline.gameObject.SetActive(true);
+            for (var finger = 0; finger < nailHighlights.Length; finger++)
+                nailHighlights[finger] = CreateDisc("Bob hand fingertip highlight", highlightMaterial);
         }
 
         public void SetPose(HandPoseFrame frame, Vector3 position, Quaternion rotation, float scale = 3f)
         {
-            root.gameObject.SetActive(frame.tracked);
-            if (!frame.tracked)
-            {
-                hasTrackingAnchor = false;
-                return;
-            }
+            SetPoseInternal(frame, position, rotation, scale);
+        }
 
-            root.rotation = rotation;
-            var wristWorld = frame.joints[0];
-            var palmUp = frame.joints[11] - wristWorld;
-            var palmAcross = frame.joints[6] - frame.joints[21];
-            palmAcross = Vector3.ProjectOnPlane(palmAcross, palmUp);
-            if (palmUp.sqrMagnitude < .0001f || palmAcross.sqrMagnitude < .0001f)
+        public void SetLearnerPose(HandPoseFrame frame, Vector3 position, Quaternion rotation, float scale = 3f)
+        {
+            SetPoseInternal(frame, position, rotation, scale);
+        }
+
+        void SetPoseInternal(HandPoseFrame frame, Vector3 position, Quaternion rotation, float scale)
+        {
+            if (frame == null || !frame.tracked)
             {
                 root.gameObject.SetActive(false);
-                hasTrackingAnchor = false;
+                poseInitialized = false;
                 return;
             }
-            palmUp.Normalize();
-            palmAcross.Normalize();
-            var palmNormal = Vector3.Cross(palmAcross, palmUp).normalized;
 
-            // Keep the hand attached to the learner's real wrist. The card is
-            // the safe presentation area, so clamp only the translation at its
-            // edges; hand roll, pitch and yaw remain visible to the learner.
-            if (!hasTrackingAnchor)
+            root.gameObject.SetActive(true);
+            // Both cards belong to the board's plane, including after the
+            // classroom is anchored to the headset's starting direction.
+            root.position = position + (root.parent != null
+                ? root.parent.TransformVector(Vector3.back * .035f) : Vector3.back * .035f);
+            root.localRotation = rotation;
+
+            BuildDisplayPoints(frame, displayPoints);
+            var blend = poseInitialized
+                ? 1f - Mathf.Exp(-24f * Mathf.Max(Time.unscaledDeltaTime, .001f))
+                : 1f;
+            for (var index = 0; index < displayPoints.Length; index++)
             {
-                trackingAnchor = wristWorld;
-                hasTrackingAnchor = true;
-            }
-            var boardNormal = rotation * Vector3.forward;
-            var boardRight = rotation * Vector3.right;
-            var boardUp = rotation * Vector3.up;
-            var movement = wristWorld - trackingAnchor;
-            var horizontalMotion = Mathf.Clamp(Vector3.Dot(movement, boardRight) * .78f, -.42f, .42f);
-            var verticalMotion = Mathf.Clamp(Vector3.Dot(movement, boardUp) * .78f, -.30f, .30f);
-            root.position = position + boardRight * horizontalMotion + boardUp * verticalMotion;
-
-            // The old renderer forced a fixed upright board rotation. Build the
-            // display orientation from the actual palm plane instead, retaining
-            // the board-facing side so the light-grey hand stays readable while
-            // still turning and moving with the user's wrist.
-            if (Vector3.Dot(palmNormal, boardNormal) < 0f) palmNormal = -palmNormal;
-            var trackedRotation = Quaternion.LookRotation(palmNormal, palmUp);
-            root.rotation = Quaternion.Slerp(rotation, trackedRotation, .92f);
-
-            var handSize = .0001f;
-            for (var i = 1; i < frame.joints.Length; i++)
-                handSize = Mathf.Max(handSize, Vector3.Distance(wristWorld, frame.joints[i]));
-            for (var i = 0; i < joints.Length; i++)
-            {
-                // All 26 tracked joints contribute. Depth is retained lightly
-                // so curled fingers read as wood joints without hiding the
-                // handshape the learner is meant to copy.
-                var relative = frame.joints[i] - wristWorld;
-                var point = new Vector3(
-                    Vector3.Dot(relative, palmAcross),
-                    Vector3.Dot(relative, palmUp),
-                    Vector3.Dot(relative, palmNormal) * .24f) / handSize * scale;
-                joints[i].localPosition = point;
-                jointOutlines[i].localPosition = point + Vector3.forward * .018f;
-                joints[i].localPosition = point - Vector3.forward * .05f;
-                var radius = JointRadius(i);
-                joints[i].localScale = Vector3.one * radius;
-                jointOutlines[i].localScale = Vector3.one * radius * .86f;
+                var target = displayPoints[index] * scale;
+                smoothedPoints[index] = poseInitialized
+                    ? Vector3.Lerp(smoothedPoints[index], target, blend)
+                    : target;
             }
 
-            var tipIndices = new[] { 5, 10, 15, 20, 25 };
-            for (var i = 0; i < fingertipHighlights.Length; i++)
-            {
-                var tip = joints[tipIndices[i]].localPosition + Vector3.forward * .045f;
-                fingertipHighlights[i].localPosition = tip;
-                fingertipHighlights[i].localScale = Vector3.one * .055f;
-            }
-
-            for (var i = 0; i < bones.Length; i++)
-            {
-                var a = joints[Bones[i, 0]].localPosition;
-                var b = joints[Bones[i, 1]].localPosition;
-                // The board faces the opposite local-Z direction from the
-                // first prototype. Keep the contour behind the wood fill or
-                // it completely occludes the articulated hand on Quest.
-                SetCapsule(boneOutlines[i], a, b, SegmentRadius(i) * 1.16f, -.06f);
-                SetCapsule(bones[i], a, b, SegmentRadius(i), .01f);
-            }
-
-            var wristPoint = joints[0].localPosition;
-            var indexBase = joints[6].localPosition;
-            var middleBase = joints[11].localPosition;
-            var ringBase = joints[16].localPosition;
-            var littleBase = joints[21].localPosition;
+            var wristPoint = smoothedPoints[0];
+            // Proximal joints are the knuckles for Quest, webcam and recordings.
+            // Source-dependent offsets made the same pose look different in
+            // Bob's card and the learner card, with a tiny palm on live hands.
+            var indexBase = smoothedPoints[7];
+            var middleBase = smoothedPoints[12];
+            var ringBase = smoothedPoints[17];
+            var littleBase = smoothedPoints[22];
             var knuckles = (indexBase + middleBase + ringBase + littleBase) * .25f;
             var up = knuckles - wristPoint;
             if (up.sqrMagnitude < .0001f) up = Vector3.up * .15f;
-            var direction = up.normalized;
-            var horizontal = new Vector3(-direction.y, direction.x, 0f);
+            var vertical = up.normalized;
+            var horizontal = Vector3.ProjectOnPlane(littleBase - indexBase, vertical);
+            if (horizontal.sqrMagnitude < .0001f) horizontal = new Vector3(vertical.y, -vertical.x, 0f);
+            if (horizontal.sqrMagnitude < .0001f) horizontal = Vector3.right;
+            horizontal.Normalize();
+
             var fingerSpan = Vector3.Distance(indexBase, littleBase);
             var palmCenter = wristPoint + up * .54f;
-            SetOval(palmOutline, palmCenter - Vector3.forward * .06f, horizontal, direction,
-                fingerSpan * .90f + .16f, up.magnitude * .80f + .13f);
-            SetOval(palm, palmCenter + Vector3.forward * .01f, horizontal, direction,
-                fingerSpan * .74f + .08f, up.magnitude * .64f + .05f);
-            SetOval(wristOutline, wristPoint - direction * .06f - Vector3.forward * .06f,
-                horizontal, direction, .28f, .27f);
-            SetOval(wrist, wristPoint - direction * .06f + Vector3.forward * .01f, horizontal, direction, .22f, .20f);
-            SetOval(highlight, palmCenter + horizontal * (fingerSpan * -.16f) + direction * (up.magnitude * .20f) + Vector3.forward * .025f,
-                horizontal, direction, .10f, .05f);
+            var palmWidth = fingerSpan * 1.10f + .10f;
+            var palmHeight = up.magnitude * .80f + .08f;
+            SetDiscPair(palmOutline, palmFill, palmCenter, vertical,
+                palmWidth + .035f, palmHeight + .035f, .010f, .018f);
+
+            // Let the palm overlap the short wrist cuff. The old downward,
+            // detached oval read as a second blob at headset distance.
+            var wristCenter = wristPoint - vertical * .015f;
+            SetDiscPair(wristOutline, wristFill, wristCenter, vertical,
+                fingerSpan * .82f + .10f, .20f, .003f, .009f);
+
+            for (var index = 0; index < fingers.Count; index++)
+            {
+                var stroke = fingers[index];
+                var width = Mathf.Clamp(fingerSpan * FingerWidthRatios[index], .025f, .14f);
+                currentFingerWidths[index] = width;
+                stroke.outline.startWidth = width * 1.22f;
+                stroke.outline.endWidth = width * .92f;
+                stroke.fill.startWidth = width;
+                stroke.fill.endWidth = width * .76f;
+                for (var point = 0; point < stroke.count; point++)
+                {
+                    var segment = Mathf.Min(point / CurveSubdivisions, stroke.jointCount - 2);
+                    var amount = point == stroke.count - 1 ? 1f : point % CurveSubdivisions / (float)CurveSubdivisions;
+                    var p0 = smoothedPoints[stroke.start + Mathf.Max(0, segment - 1)];
+                    var p1 = smoothedPoints[stroke.start + segment];
+                    var p2 = smoothedPoints[stroke.start + segment + 1];
+                    var p3 = smoothedPoints[stroke.start + Mathf.Min(stroke.jointCount - 1, segment + 2)];
+                    var positionOnFinger = CatmullRom(p0, p1, p2, p3, amount);
+                    stroke.outline.SetPosition(point, positionOnFinger + Vector3.forward * stroke.outlineZ);
+                    stroke.fill.SetPosition(point, positionOnFinger + Vector3.forward * stroke.fillZ);
+                }
+            }
+
+            for (var finger = 0; finger < FingerStarts.Length; finger++)
+            for (var crease = 0; crease < 2; crease++)
+            {
+                var start = FingerStarts[finger];
+                var joint = start + crease + 1;
+                var before = smoothedPoints[joint] - smoothedPoints[joint - 1];
+                var after = smoothedPoints[joint + 1] - smoothedPoints[joint];
+                var tangent = before + after;
+                if (tangent.sqrMagnitude < .0001f) tangent = before;
+                var across = new Vector3(-tangent.y, tangent.x, 0f).normalized;
+                var radius = currentFingerWidths[finger] * .28f;
+                var center = smoothedPoints[joint] + Vector3.forward * .037f;
+                var creaseLine = fingerCreases[finger, crease];
+                creaseLine.startWidth = currentFingerWidths[finger] * .10f;
+                creaseLine.endWidth = currentFingerWidths[finger] * .075f;
+                creaseLine.SetPosition(0, center - across * radius);
+                creaseLine.SetPosition(1, center + across * (radius * .08f) + Vector3.up * .004f);
+                creaseLine.SetPosition(2, center + across * radius);
+            }
+
+            foreach (var crease in palmCreases)
+            {
+                crease.startWidth = .010f;
+                crease.endWidth = .008f;
+            }
+            SetPalmCrease(palmCreases[0], wristPoint, horizontal, vertical, fingerSpan, up.magnitude,
+                new Vector2(-.40f, .42f), new Vector2(-.04f, .50f), new Vector2(.34f, .35f), new Vector2(.43f, .27f));
+            SetPalmCrease(palmCreases[1], wristPoint, horizontal, vertical, fingerSpan, up.magnitude,
+                new Vector2(-.08f, .23f), new Vector2(.10f, .40f), new Vector2(.29f, .68f), new Vector2(.36f, .76f));
+
+            for (var finger = 0; finger < nailHighlights.Length; finger++)
+            {
+                var start = FingerStarts[finger];
+                var tip = smoothedPoints[start + FingerPointCounts[finger] - 1];
+                var previous = smoothedPoints[start + FingerPointCounts[finger] - 2];
+                var direction = tip - previous;
+                var nail = nailHighlights[finger];
+                nail.localPosition = Vector3.Lerp(previous, tip, .80f) + Vector3.forward * .040f;
+                nail.localRotation = Quaternion.Euler(0, 0, Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg - 90f);
+                var width = currentFingerWidths[finger] * .58f;
+                nail.localScale = new Vector3(width, width * .38f, 1f);
+            }
+
+            var highlightCenter = palmCenter - horizontal * (fingerSpan * .17f) + vertical * (up.magnitude * .17f);
+            palmHighlight.localPosition = highlightCenter + Vector3.forward * .036f;
+            palmHighlight.localRotation = Quaternion.Euler(0, 0, Mathf.Atan2(vertical.y, vertical.x) * Mathf.Rad2Deg - 90f);
+            palmHighlight.localScale = new Vector3(Mathf.Max(.06f, fingerSpan * .31f),
+                Mathf.Max(.035f, up.magnitude * .12f), 1f);
+            poseInitialized = true;
         }
 
-        Transform Ball(string name, Material material)
+        static Vector3 CatmullRom(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, float amount)
         {
-            var shape = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            shape.name = name;
-            Object.Destroy(shape.GetComponent<Collider>());
-            shape.transform.SetParent(root, false);
-            shape.GetComponent<Renderer>().sharedMaterial = material;
-            return shape.transform;
+            var t2 = amount * amount;
+            var t3 = t2 * amount;
+            return .5f * ((2f * p1) + (-p0 + p2) * amount +
+                (2f * p0 - 5f * p1 + 4f * p2 - p3) * t2 +
+                (-p0 + 3f * p1 - 3f * p2 + p3) * t3);
         }
 
-        Transform Capsule(string name, Material material)
+        LineRenderer CreateStroke(string name, Material material, float startWidth, float endWidth, int pointCount)
         {
-            var shape = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-            shape.name = name;
-            Object.Destroy(shape.GetComponent<Collider>());
-            shape.transform.SetParent(root, false);
-            shape.GetComponent<Renderer>().sharedMaterial = material;
-            return shape.transform;
+            var item = new GameObject(name);
+            item.transform.SetParent(root, false);
+            var line = item.AddComponent<LineRenderer>();
+            line.useWorldSpace = false;
+            line.positionCount = pointCount;
+            line.startWidth = startWidth;
+            line.endWidth = endWidth;
+            line.widthMultiplier = 1f;
+            // TransformZ keeps the stroke in the board plane and scales its
+            // thickness with the palm. View-aligned strokes kept their world
+            // width when the Quest classroom shrank to 28% of desktop size.
+            line.alignment = LineAlignment.TransformZ;
+            line.numCapVertices = 8;
+            line.numCornerVertices = 8;
+            line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            line.receiveShadows = false;
+            line.sharedMaterial = material;
+            return line;
         }
 
-        static void SetCapsule(Transform capsule, Vector3 start, Vector3 end, float radius, float zOffset)
+        Transform CreateDisc(string name, Material material)
         {
-            var delta = end - start;
-            capsule.localPosition = (start + end) * .5f + Vector3.forward * zOffset;
-            capsule.localRotation = Quaternion.FromToRotation(Vector3.up, delta);
-            // Unity's capsule has a default radius of .5, so X/Z need the
-            // diameter scale while Y is half-length plus one radius.
-            capsule.localScale = new Vector3(radius * 2f,
-                Mathf.Max(radius, delta.magnitude * .5f + radius), radius * 2f);
+            var item = new GameObject(name, typeof(MeshFilter), typeof(MeshRenderer));
+            item.transform.SetParent(root, false);
+            item.GetComponent<MeshFilter>().sharedMesh = UnitDisc();
+            item.GetComponent<MeshRenderer>().sharedMaterial = material;
+            return item.transform;
         }
 
-        static void SetOval(Transform shape, Vector3 position, Vector3 horizontal, Vector3 vertical,
-            float width, float height)
+        static Mesh UnitDisc()
         {
-            shape.localPosition = position;
-            shape.localRotation = Quaternion.FromToRotation(Vector3.up, vertical);
-            shape.localScale = new Vector3(Mathf.Max(.02f, width), Mathf.Max(.02f, height), .14f);
+            const int segments = 32;
+            var vertices = new Vector3[segments + 1];
+            var triangles = new int[segments * 3];
+            vertices[0] = Vector3.zero;
+            for (var index = 0; index < segments; index++)
+            {
+                var angle = index * Mathf.PI * 2f / segments;
+                vertices[index + 1] = new Vector3(Mathf.Cos(angle) * .5f, Mathf.Sin(angle) * .5f, 0f);
+                var next = (index + 1) % segments;
+                triangles[index * 3] = 0;
+                triangles[index * 3 + 1] = index + 1;
+                triangles[index * 3 + 2] = next + 1;
+            }
+            var mesh = new Mesh { name = "Bob hand soft ellipse" };
+            mesh.vertices = vertices;
+            mesh.triangles = triangles;
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
         }
 
-        static float SegmentRadius(int index)
+        static void SetDiscPair(Transform outline, Transform fill, Vector3 center, Vector3 vertical,
+            float width, float height, float outlineZ, float fillZ)
         {
-            var segment = index % 5;
-            return segment == 0 ? .105f : segment == 1 ? .092f : segment == 2 ? .080f : segment == 3 ? .068f : .058f;
+            var rotation = Quaternion.Euler(0, 0,
+                Mathf.Atan2(vertical.y, vertical.x) * Mathf.Rad2Deg - 90f);
+            outline.localPosition = center + Vector3.forward * outlineZ;
+            fill.localPosition = center + Vector3.forward * fillZ;
+            outline.localRotation = fill.localRotation = rotation;
+            outline.localScale = new Vector3(width, height, 1f);
+            fill.localScale = new Vector3(Mathf.Max(.02f, width - .035f), Mathf.Max(.02f, height - .035f), 1f);
         }
 
-        static float JointRadius(int index) => index == 0 ? .13f : index == 1 ? .10f : .065f;
+        void SetPalmCrease(LineRenderer line, Vector3 wrist, Vector3 horizontal, Vector3 vertical,
+            float fingerSpan, float palmHeight, Vector2 a, Vector2 b, Vector2 c, Vector2 d)
+        {
+            line.SetPosition(0, PalmPoint(wrist, horizontal, vertical, fingerSpan, palmHeight, a));
+            line.SetPosition(1, PalmPoint(wrist, horizontal, vertical, fingerSpan, palmHeight, b));
+            line.SetPosition(2, PalmPoint(wrist, horizontal, vertical, fingerSpan, palmHeight, c));
+            line.SetPosition(3, PalmPoint(wrist, horizontal, vertical, fingerSpan, palmHeight, d));
+        }
+
+        static Vector3 PalmPoint(Vector3 wrist, Vector3 horizontal, Vector3 vertical, float fingerSpan,
+            float palmHeight, Vector2 point) => wrist + horizontal * (point.x * fingerSpan) +
+            vertical * (point.y * palmHeight) + Vector3.forward * .037f;
+
+        static void BuildDisplayPoints(HandPoseFrame frame, Vector3[] output)
+        {
+            var wrist = frame.joints[0];
+            var knuckles = (frame.joints[7] + frame.joints[12] + frame.joints[17] + frame.joints[22]) * .25f;
+            var vertical = knuckles - wrist;
+            if (vertical.sqrMagnitude < .0001f) vertical = Vector3.up;
+            vertical.Normalize();
+
+            var horizontal = Vector3.ProjectOnPlane(frame.joints[22] - frame.joints[7], vertical);
+            if (horizontal.sqrMagnitude < .0001f) horizontal = Vector3.Cross(vertical, Vector3.forward);
+            if (horizontal.sqrMagnitude < .0001f) horizontal = Vector3.right;
+            horizontal.Normalize();
+
+            var handScale = .0001f;
+            for (var index = 1; index < HandPoseFrame.JointCount; index++)
+                handScale = Mathf.Max(handScale, Vector3.Distance(wrist, frame.joints[index]));
+            for (var index = 0; index < HandPoseFrame.JointCount; index++)
+            {
+                var delta = frame.joints[index] - wrist;
+                output[index] = new Vector3(Vector3.Dot(delta, horizontal), Vector3.Dot(delta, vertical), 0f) / handScale;
+            }
+        }
     }
 }

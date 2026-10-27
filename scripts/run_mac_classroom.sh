@@ -1,8 +1,10 @@
 #!/bin/zsh
 set -euo pipefail
 PROJECT_ROOT="${0:A:h:h}"
-APP_BINARY="$PROJECT_ROOT/unity/Builds/macOS/BCSignVR.app/Contents/MacOS/signzzZ"
-if [[ ! -x "$APP_BINARY" ]]; then
+APP_BUNDLE="$PROJECT_ROOT/unity/Builds/macOS/BCSignVR.app"
+APP_EXECUTABLE="$(/usr/libexec/PlistBuddy -c 'Print CFBundleExecutable' "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true)"
+APP_BINARY="$APP_BUNDLE/Contents/MacOS/$APP_EXECUTABLE"
+if [[ -z "$APP_EXECUTABLE" || ! -f "$APP_BINARY" || ! -x "$APP_BINARY" ]]; then
   print "The classroom needs a Mac build first. See README.md."
   exit 1
 fi
@@ -23,8 +25,8 @@ if [[ -x "$PROJECT_ROOT/.venv/bin/python" ]] && ! pgrep -f "webcam/hand_bridge.p
       if "$PROJECT_ROOT/.venv/bin/python" "$PROJECT_ROOT/webcam/hand_bridge.py" --camera mac --no-preview >>/tmp/bcsignvr-webcam.log 2>&1; then
         break
       else
-        status=$?
-        print "Webcam tracker stopped ($status); retrying in 2 seconds." >>/tmp/bcsignvr-webcam.log
+        camera_exit_code=$?
+        print "Webcam tracker stopped ($camera_exit_code); retrying in 2 seconds." >>/tmp/bcsignvr-webcam.log
         sleep 2
       fi
     done

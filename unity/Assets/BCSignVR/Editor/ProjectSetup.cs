@@ -1,7 +1,8 @@
 using BCSignVR;
-using System.Reflection;
 using System.Linq;
 using UnityEditor;
+using UnityEditor.Android;
+using UnityEditor.Build;
 using UnityEditor.SceneManagement;
 using UnityEditor.XR.Management;
 using UnityEditor.XR.Management.Metadata;
@@ -23,7 +24,6 @@ namespace BCSignVR.Editor
             PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Standalone, "za.ac.belgiumcampus.bcsignvr");
             PlayerSettings.colorSpace = ColorSpace.Linear;
             PlayerSettings.runInBackground = true;
-            ConfigureRuntimeInputAndPhysics();
             ConfigureOpenXR(BuildTargetGroup.Standalone);
             ConfigureOpenXR(BuildTargetGroup.Android);
 
@@ -40,7 +40,6 @@ namespace BCSignVR.Editor
         [MenuItem("BCSignVR/Build macOS Demo")]
         public static void BuildMac()
         {
-            ConfigureRuntimeInputAndPhysics();
             ConfigureOpenXR(BuildTargetGroup.Standalone, useMacLoader: true);
             AssetDatabase.SaveAssets();
             System.IO.Directory.CreateDirectory("Builds/macOS");
@@ -60,6 +59,11 @@ namespace BCSignVR.Editor
         [MenuItem("BCSignVR/Build Windows 11 Demo")]
         public static void BuildWindows()
         {
+            // The macOS editor can retain an ARM64 architecture even with the
+            // StandaloneWindows64 target. Explicitly build for Intel/AMD PCs.
+            EditorUserBuildSettings.selectedStandaloneTarget = BuildTarget.StandaloneWindows64;
+            EditorUserBuildSettings.SetPlatformSettings(
+                BuildPipeline.GetBuildTargetName(BuildTarget.StandaloneWindows64), "Architecture", "x64");
             ConfigureOpenXR(BuildTargetGroup.Standalone);
             AssetDatabase.SaveAssets();
             System.IO.Directory.CreateDirectory("Builds/Windows");
@@ -79,8 +83,8 @@ namespace BCSignVR.Editor
         [MenuItem("BCSignVR/Build Quest 3 APK")]
         public static void BuildQuest()
         {
-            ConfigureRuntimeInputAndPhysics();
             ConfigureOpenXR(BuildTargetGroup.Android);
+            ConfigureQuestBranding();
             PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android, "za.ac.belgiumcampus.bcsignvr");
             AssetDatabase.SaveAssets();
             System.IO.Directory.CreateDirectory("Builds/Quest");
@@ -97,55 +101,27 @@ namespace BCSignVR.Editor
             Debug.Log($"BCSignVR Quest 3 APK complete: {report.summary.totalSize} bytes");
         }
 
-        // Unity 6 can store these values in the active Build Profile instead of
-        // the legacy ProjectSettings asset. Configure both locations so the
-        // runtime keeps the existing keyboard/mouse path for desktop while XR
-        // input continues to work on the headset. Dynamic colliders are also
-        // needed by the board's hand/controller pointer.
-        static void ConfigureRuntimeInputAndPhysics()
+        static void ConfigureQuestBranding()
         {
-            var configured = false;
-            var buildProfileType = typeof(PlayerSettings).Assembly.GetType("UnityEditor.Build.Profile.BuildProfile");
-            if (buildProfileType != null)
-            {
-                var globalField = buildProfileType.GetField("s_GlobalPlayerSettings", BindingFlags.Static | BindingFlags.NonPublic);
-                var globalSettings = globalField?.GetValue(null) as PlayerSettings;
-                configured |= ApplyRuntimeSettings(globalSettings);
+            PlayerSettings.productName = "signzzZ";
+            var icon = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Branding/signzzz-app-icon.png");
+            if (icon == null)
+                throw new System.InvalidOperationException("Quest app icon is missing: Assets/Branding/signzzz-app-icon.png");
 
-                var getActiveProfile = buildProfileType.GetMethod(
-                    "GetActiveBuildProfile", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-                var activeProfile = getActiveProfile?.Invoke(null, null);
-                var overrideField = buildProfileType.GetField("m_PlayerSettings", BindingFlags.Instance | BindingFlags.NonPublic);
-                var overrideSettings = activeProfile != null
-                    ? overrideField?.GetValue(activeProfile) as PlayerSettings
-                    : null;
-                configured |= ApplyRuntimeSettings(overrideSettings);
-            }
-
-            if (!configured)
-            {
-                var fallback = Resources.FindObjectsOfTypeAll<PlayerSettings>().FirstOrDefault();
-                configured = ApplyRuntimeSettings(fallback);
-            }
-
-            if (!configured)
-                Debug.LogWarning("BCSignVR could not locate Unity Player Settings; desktop and XR input may need manual configuration.");
+            ConfigureAndroidIcon(AndroidPlatformIconKind.Adaptive, icon);
         }
 
-        static bool ApplyRuntimeSettings(PlayerSettings playerSettings)
+        static void ConfigureAndroidIcon(PlatformIconKind kind, Texture2D icon)
         {
-            if (playerSettings == null) return false;
+            var target = NamedBuildTarget.Android;
+            var slots = PlayerSettings.GetPlatformIcons(target, kind);
+            if (slots == null || slots.Length == 0)
+                throw new System.InvalidOperationException($"Unity returned no Android icon slots for {kind}.");
 
-            var serialized = new SerializedObject(playerSettings);
-            var inputHandler = serialized.FindProperty("activeInputHandler");
-            var stripEngineCode = serialized.FindProperty("stripEngineCode");
-            if (inputHandler == null || stripEngineCode == null) return false;
+            foreach (var slot in slots)
+                slot.SetTextures(Enumerable.Repeat(icon, slot.maxLayerCount).ToArray());
 
-            inputHandler.intValue = 2; // New Input System + legacy Input API.
-            stripEngineCode.boolValue = false; // Keep runtime physics components available.
-            serialized.ApplyModifiedPropertiesWithoutUndo();
-            EditorUtility.SetDirty(playerSettings);
-            return true;
+            PlayerSettings.SetPlatformIcons(target, kind, slots);
         }
 
         static void ConfigureOpenXR(BuildTargetGroup group, bool useMacLoader = false)
@@ -178,14 +154,23 @@ namespace BCSignVR.Editor
                 ?? OpenXRSettings.GetSettingsForBuildTargetGroup(group);
             var handTracking = settings?.GetFeature<HandTracking>();
             if (handTracking != null) handTracking.enabled = true;
-            // Quest must be declared as a Meta XR application in the Android
-            // manifest. Without this feature Unity still starts OpenXR, but
-            // Quest treats the APK like a flat 2D panel and the classroom is
-            // not presented in the headset view.
-            var metaQuest = settings?.GetFeatures().FirstOrDefault(feature =>
-                feature != null && (feature.name == "MetaQuestFeature Android" ||
-                    feature.GetType().FullName?.EndsWith(".MetaQuestFeature") == true));
-            if (metaQuest != null && group == BuildTargetGroup.Android) metaQuest.enabled = true;
+            if (group == BuildTargetGroup.Android && settings != null)
+            {
+                // These features are required for a normal Quest Android
+                // player. Without them the headset can start passthrough and
+                // an OpenXR session while Unity's stereo camera renders no
+                // application geometry.
+                foreach (var feature in settings.GetFeatures())
+                {
+                    var typeName = feature?.GetType().FullName;
+                    if (typeName == "UnityEngine.XR.OpenXR.Features.MetaQuestSupport.MetaQuestFeature" ||
+                        typeName == "UnityEngine.XR.OpenXR.Features.Interactions.MetaQuestTouchPlusControllerProfile" ||
+                        typeName == "UnityEngine.XR.OpenXR.Features.Interactions.OculusTouchControllerProfile")
+                        feature.enabled = true;
+                    else if (typeName == "UnityEngine.XR.OpenXR.Features.OculusQuestSupport.OculusQuestFeature")
+                        feature.enabled = false;
+                }
+            }
             if (settings != null && group == BuildTargetGroup.Standalone)
             {
                 var serializedSettings = new SerializedObject(settings);

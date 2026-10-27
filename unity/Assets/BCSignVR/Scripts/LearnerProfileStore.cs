@@ -18,8 +18,8 @@ namespace BCSignVR
     }
 
     /// <summary>
-    /// Small on-headset profile directory. Every learner gets an independent
-    /// local progress file, so the Netflix-style chooser never mixes practice.
+    /// On-headset profile directory. Each profile gets its own local progress file,
+    /// while the directory itself survives app restarts and Quest updates.
     /// </summary>
     public sealed class LearnerProfileStore
     {
