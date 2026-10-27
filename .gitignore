@@ -49,6 +49,12 @@ ExportedObj/
 *.slnx
 *.suo
 *.tmp
+__pycache__/
+*.py[cod]
+*.DS_Store
+HandTracking/.venv*/
+BackEnd/node_modules/
+BackEnd/data/
 *.user
 *.userprefs
 *.pidb
